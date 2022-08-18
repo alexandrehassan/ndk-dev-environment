@@ -1,0 +1,9 @@
+# metric agent configuration file
+metric:
+  path: /opt/metric
+  launch-command: /opt/metric/run.sh
+  search-command: python3 /opt/metric/main.py
+  yang-modules:
+    names: ["metric"]
+    source-directories:
+      - "/opt/metric/yang"

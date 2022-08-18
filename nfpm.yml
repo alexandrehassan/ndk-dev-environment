@@ -1,0 +1,13 @@
+name: "metric" # agent's name
+arch: "amd64" # architecture you are using
+version: "v0.1.0" # version of this rpm package
+maintainer: "John Doe <john@doe.com>"
+description: "metric NDK agent" # description of a package
+vendor: "JD Corp" # optional information about the creator of the package
+license: "BSD-3-Clause"
+contents: # contents to add to the package
+  - src: "./metric/"    # local path of agent Python source
+    dst: "/opt/metric/" # destination path of agent sources
+
+  - src: "./metric.yml" # local path of agent yml
+    dst: "/etc/opt/srlinux/appmgr/metric.yml" # destination path of agent yml
