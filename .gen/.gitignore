@@ -35,3 +35,13 @@ logs
 build
 # source template files
 .gen
+
+venv/
+wheels/
+
+tests/
+!tests/lab/test.clab.yml
+!tests/Dockerfile
+!tests/requirements.txt
+!tests/srl.py
+!tests/test.robot

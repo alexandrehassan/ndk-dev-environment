@@ -7,8 +7,8 @@
 # - containerlab
 #################
 
-APPNAME = greeter
-CLASSNAME = Greeter
+APPNAME = metric
+CLASSNAME = Metric
 
 LABFILE = dev.clab.yml
 TESTLABFILE = test.clab.yml
@@ -132,7 +132,7 @@ destroy-test-lab:
 redeploy-test-lab: destroy-test-lab deploy-test-lab
 
 redeploy_all_and_test: redeploy-all redeploy-test-lab
-	docker exec -ti clab-${APPNAME}-test-test1 robot -b/mnt/debug.txt test.robot
+	docker exec -t clab-${APPNAME}-test-test1 robot -b/mnt/debug.txt test.robot
 
 test:
 	docker exec -ti clab-${APPNAME}-test-test1 robot -b/mnt/debug.txt test.robot

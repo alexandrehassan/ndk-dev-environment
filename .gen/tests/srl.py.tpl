@@ -31,13 +31,3 @@ class srl:
             encoding=enc,
         )
         return result["notification"][0]["update"][0]["val"]
-
-    def set_name(self):
-        m = [("/{{ getenv "APPNAME" }}", {"name": "seb"})]
-        self.gc.set(update=m, encoding=enc)
-
-    def check_uptime(self):
-        result = self.gc.get(path=["/{{ getenv "APPNAME" }}/uptime"], encoding=enc)
-        print(f"result is: {result}")
-        # return True
-        return result["notification"][0]["update"][0]["val"]

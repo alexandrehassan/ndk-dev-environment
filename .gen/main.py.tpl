@@ -22,7 +22,8 @@ if __name__ == "__main__":
     )
     logging.info("START TIME :: {}".format(datetime.now()))
 
-    with {{ getenv "CLASSNAME" }}(name = agent_name) as agent:
+    with {{ getenv "CLASSNAME" }}(name=agent_name) as agent:
         agent.run()
 
     logging.info("STOP TIME :: {}".format(datetime.now()))
+    

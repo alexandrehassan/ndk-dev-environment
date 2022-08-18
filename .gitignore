@@ -6,5 +6,6 @@
 !README.md
 !requirements.txt
 !.vscode
+!.github/
 .vscode/*
 !.vscode/tasks.json

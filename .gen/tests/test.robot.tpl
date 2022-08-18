@@ -42,9 +42,3 @@ Test agent start
     Wait Until Keyword Succeeds     30x     1s  
     ...    Agent Should Run
     Sleep   5
-
-Test set name and check uptime
-    set_name
-    Sleep           5
-    ${result}=      check_uptime
-    Should be Equal     ${result}   8:00
