@@ -7,8 +7,8 @@
 # - containerlab
 #################
 
-APPNAME = metric
-CLASSNAME = Metric
+APPNAME = support
+CLASSNAME = Support
 
 LABFILE = dev.clab.yml
 TESTLABFILE = test.clab.yml

@@ -22,7 +22,7 @@ THRESHOLD_OPS: Dict[str, Callable[[int, int], bool]] = {
 }
 
 
-class Metric(BaseAgent):
+class Support(BaseAgent):
     def __init__(self, name):
         super().__init__(name)
         self.paths: List[Path] = []
