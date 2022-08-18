@@ -1,47 +1,11 @@
-# IDE local settings
-.vscode
-.idea
-
-# common unneeded files
-.DS_Store
-.venv
-
-# Python
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-
-# ignore lab backup file
-*.clab.y?ml
-# ignore dev lab files
-clab-*
-# logs dir contains logs from srlinux
-logs
-# agent binary
-build
-# source template files
-.gen
-
-venv/
-wheels/
-
-tests/
-!tests/lab/test.clab.yml
-!tests/Dockerfile
-!tests/requirements.txt
-!tests/srl.py
-!tests/test.robot
+/*
+!.gitignore
+!.gen
+!LICENSE
+!Makefile
+!README.md
+!requirements.txt
+!.vscode
+!.github/
+.vscode/*
+!.vscode/tasks.json
