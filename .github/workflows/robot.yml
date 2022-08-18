@@ -1,0 +1,28 @@
+name: Robot tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "tech-support-python"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v2
+      - name: install containerlab
+        run: bash -c "$(curl -sL https://get.containerlab.dev)"
+      - name: build image
+        run: make && make build-automated-test
+      - name: deploy dev and test
+        run: make redeploy_all_and_test
+      - name: upload test results
+        uses: actions/upload-artifact@v2
+        with:
+          name: test results
+          path: |
+            tests/test_results.xml
+            tests/report.html
+            tests/output.xml
