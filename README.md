@@ -34,7 +34,7 @@ make redeploy-all
 The app named `greeter` is now running the `srl1` and `srl2` containerlab nodes. The `name` configuration parameter defined in the YANG model is available and you can explore the logs of the app by reading the log file:
 
 ```console
-tail -f logs/srl1/stdout/greeter.log
+tail -f logs/srl1/stdout/support.log
 ```
 
 The greeter app logs will show "greeter/name not configured" on startup so you will have to modify the `greeter/name` configuration using the SR Linux CLI.

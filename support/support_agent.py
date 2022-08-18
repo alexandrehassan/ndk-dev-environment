@@ -1,32 +1,39 @@
 import logging
-from typing import Callable, Dict, List
-
-from base_agent import BaseAgent
-
+import os
+from typing import Dict
 import grpc
 import json
+from datetime import datetime
 
+from base_agent import BaseAgent
 
 from ndk import sdk_service_pb2
 from ndk import config_service_pb2
 from ndk import sdk_common_pb2 as sdk_common
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
-THRESHOLD_OPS: Dict[str, Callable[[int, int], bool]] = {
-    "gt": lambda x, y: x > y,
-    "lt": lambda x, y: x < y,
-    "eq": lambda x, y: x == y,
-    "neq": lambda x, y: x != y,
-    "ge": lambda x, y: x >= y,
-    "le": lambda x, y: x <= y,
-}
+FLAG = "run"
+PATHS = [
+    "acl",
+    "bfd",
+    "interface",
+    "platform",
+    "system",
+    "network-instance",
+    "routing-policy",
+    "qos",
+    "tunnel",
+    "tunnel-interface",
+    "support",
+]
+
+TIME_F = "%Y-%m-%d %H.%M.%S"
 
 
 class Support(BaseAgent):
     def __init__(self, name):
         super().__init__(name)
-        self.paths: List[Path] = []
-        self.flag = False
+        self.path = ".support"
 
     def __enter__(self):
         super().__enter__()
@@ -55,15 +62,16 @@ class Support(BaseAgent):
                 f"stream_id: {response.stream_id} sub_id: {response.sub_id}"
             )
 
-    def _set_flag(self, value: bool) -> None:
-        logging.info(f"Setting flag to {value}")
-        flag = {"flag": "true" if value else "false"}
-        self._update_telemetry(".metric", flag)
+    def _set_done(self):
+        """Set done flag"""
+        logging.info("*" * 8 + " Setting Flag Value " + "*" * 8)
+        self._update_telemetry(self.path, {FLAG: "false"})
         self._update_flag_value()
 
     def _update_flag_value(self):
         logging.info("*" * 8 + " Getting Flag Value " + "*" * 8)
-        response = self._get_state_data(path=["/metric/flag"])
+        # response = self._get_state_data(path=["/metric/flag"])
+        response = self._get_state_data(path=[f"/{self.name}/{FLAG}"])
         logging.info(f"GNMI server Response: {response}")
         try:
             flag_value = response["notification"][0]["update"][0]["val"]
@@ -71,13 +79,6 @@ class Support(BaseAgent):
             self.flag = flag_value
         except KeyError as e:
             logging.error(f"Server response not formatted as expected: {e}")
-
-    def _find_path(self, key: str):
-        """Find path object by key"""
-        for path in self.paths:
-            if path.path == key:
-                return path
-        return None
 
     def _handle_ConfigNotification(
         self, notification: config_service_pb2.ConfigNotification
@@ -87,31 +88,77 @@ class Support(BaseAgent):
         Args:
             config_notif: Configuration notification
         """
-        logging.info(f"{notification}")
-        if notification.key.js_path == ".metric.paths":
-            path_key = notification.key.keys[0]
+        # logging.info(f"{notification}")
+        if notification.key.js_path == self.path:
+            # path_key = notification.key.keys[0]
             if _is_create_notif(notification):
-                self.paths.append(Path(path_key, notification.data.json))
+                # self.paths.append(Path(path_key, notification.data.json))
+                self._get_node_info()
             elif _is_delete_notif(notification):
-                self.paths.remove(self._find_path(path_key))
+                # self.paths.remove(self._find_path(path_key))
+                pass
             elif _is_change_notif(notification):
-                self._find_path(path_key).update(notification.data.json)
+                # self._find_path(path_key).update(notification.data.json)
+                # pass
+                logging.info(f"{notification}")
+                self._get_node_info()
         elif notification.key.js_path == ".commit.end":
             logging.info("Received commit end notification")
         else:
             logging.info(f"Unhandled config notification: {notification}")
 
-    def _log_paths(self):
-        logging.info("*" * 8 + " Printing Paths " + "*" * 8)
-        for path in self.paths:
-            logging.info(f"{path}")
+    def _mkdir(self, name: str) -> None:
+        """Make directory"""
+        path = os.path.join(os.path.dirname(__file__), name)
+        if not os.path.exists(path):
+            os.mkdir(path)
+        return path
+
+    def _get_node_info(self):
+        """Writes the config found under each of the base paths to a file"""
+        logging.info("*" * 8 + " Getting Node Info " + "*" * 8)
+        response = self._get_state_data(path=PATHS)
+        # Timestamp from first response is used for all subsequent
+        # responses (convert from nanoseconds to seconds)
+        timestamp_seconds = response["notification"][0]["timestamp"] // 1000000000
+        timestamp = datetime.fromtimestamp(timestamp_seconds).strftime(TIME_F)
+
+        # Ensure output directory exists
+        self.output_path = self._mkdir("output")
+
+        # Filter out empty updates
+        responses = [r for r in response["notification"] if "update" in r]
+        for path_response in responses:
+            if len(path_response["update"]) != 1:
+                logging.error(f"Unexpected number of updates for path: {path_response}")
+            self._parse_update(path_response["update"][0], timestamp)
+
+    def _parse_update(self, update: Dict[str, Dict], timestamp: str) -> None:
+        """Parse update and write to file
+        If an update has an empty body, the update is ignored.
+        If an update has no path, recursively parse the update body.
+
+        Args:
+            update: Update to parse
+            timestamp: Timestamp of update
+        """
+        path = update["path"]
+        val = update["val"]
+        if not path:
+            for key, value in val.items():
+                self._parse_update({"path": key, "val": value}, timestamp)
+            return
+        if not val:
+            return
+        path = path.split(":")[-1]  # Remove prefix
+        logging.info(f"{self.output_path}/{timestamp}-{path}.json")
+        with open(f"{self.output_path}/{timestamp}-{path}.json", "w") as f:
+            f.write(json.dumps(val))
 
     def run(self):
         try:
             for obj in self._get_notifications():
                 self._handle_notification(obj)
-                self._log_paths()
-
         except SystemExit:
             logging.info("Handling SystemExit")
         except grpc._channel._Rendezvous as err:
@@ -121,60 +168,6 @@ class Support(BaseAgent):
             raise e
         finally:
             logging.info("End of notification stream reading")
-
-
-class Path:
-    def __init__(self, key: str, json_data: str):
-        self.path = key
-        try:
-            self.data = json.loads(json_data)["paths"]
-            self.sampling_rate = self.data["sampling_rate"]["value"]
-            self.threshold = self.data["threshold"]["value"]
-            self.operator = self.data["operator"]
-            self.intervals = [int(data["value"]) for data in self.data["intervals"]]
-        except KeyError as e:
-            logging.error(f"KeyError {e}")
-
-    def check_threshold(self, value: int) -> bool:
-        """Check if value is within threshold
-
-        Args:
-            value: Value to check
-
-        Returns:
-            True if value is within threshold, False otherwise
-        """
-        return THRESHOLD_OPS[self.operator](value, self.threshold)
-
-    def update(self, json_data: str) -> None:
-        """Update the path with new data"""
-        self.data = json.loads(json_data)["paths"]
-
-        if self.data["sampling_rate"]["value"] != self.sampling_rate:
-            self.sampling_rate = self.data["sampling_rate"]["value"]
-            logging.info(f"Sampling rate updated to {self.sampling_rate}")
-        if self.data["threshold"]["value"] != self.threshold:
-            self.threshold = self.data["threshold"]["value"]
-            logging.info(f"Threshold updated to {self.threshold}")
-        if self.data["operator"] != self.operator:
-            self.operator = self.data["operator"]
-            logging.info(f"Operator updated to {self.operator}")
-
-        new_interval = [int(data["value"]) for data in self.data["intervals"]]
-        if new_interval != self.intervals:
-            self.intervals = new_interval
-            logging.info(f"Intervals updated to {self.intervals}")
-
-    def __repr__(self) -> str:
-        pass
-        # return f"Path: {self.__str__()}"
-
-    def __str__(self) -> str:
-        return (
-            f"key: {self.path}, sampling_rate: {self.sampling_rate}, "
-            f"threshold: {self.threshold}, operator: {self.operator}, "
-            f"intervals: {self.intervals}"
-        )
 
 
 def _is_change_notif(notification):
