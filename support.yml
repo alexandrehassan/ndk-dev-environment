@@ -1,0 +1,9 @@
+# support agent configuration file
+support:
+  path: /opt/support
+  launch-command: /opt/support/run.sh
+  search-command: python3 /opt/support/main.py
+  yang-modules:
+    names: ["support"]
+    source-directories:
+      - "/opt/support/yang"
