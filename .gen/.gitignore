@@ -26,7 +26,7 @@ __pycache__/
 *.out
 
 # ignore lab backup file
-*.clab.y?ml.bak
+*.clab.y?ml
 # ignore dev lab files
 clab-*
 # logs dir contains logs from srlinux
@@ -34,13 +34,11 @@ logs
 # agent binary
 build
 # source template files
-# .gen
-# ..gen
+.gen
 
 venv/
 wheels/
 
-support/output/
 tests/
 !tests/lab/test.clab.yml
 !tests/Dockerfile
