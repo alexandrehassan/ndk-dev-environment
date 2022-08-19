@@ -90,18 +90,14 @@ class Support(BaseAgent):
         """
         # logging.info(f"{notification}")
         if notification.key.js_path == self.path:
-            # path_key = notification.key.keys[0]
             if _is_create_notif(notification):
-                # self.paths.append(Path(path_key, notification.data.json))
-                self._get_node_info()
+                # self._get_node_info()
+                pass
             elif _is_delete_notif(notification):
-                # self.paths.remove(self._find_path(path_key))
                 pass
             elif _is_change_notif(notification):
-                # self._find_path(path_key).update(notification.data.json)
-                # pass
-                logging.info(f"{notification}")
-                self._get_node_info()
+                # self._get_node_info()
+                pass
         elif notification.key.js_path == ".commit.end":
             logging.info("Received commit end notification")
         else:

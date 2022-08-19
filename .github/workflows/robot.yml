@@ -19,6 +19,7 @@ jobs:
       - name: deploy dev and test
         run: make redeploy_all_and_test
       - name: upload test results
+        if: always()
         uses: actions/upload-artifact@v2
         with:
           name: test results
