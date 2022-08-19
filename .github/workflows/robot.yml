@@ -38,8 +38,13 @@ jobs:
         run: bash -c "$(curl -sL https://get.containerlab.dev)"
       - name: checkout repo
         uses: actions/checkout@v3
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ hashFiles('setup.py') }}-${{ hashFiles('dev-requirements.txt') }}
       - name: Run automated tests
-        run: make automation-test
+        run: make automation-test && ls && ls support/
       - name: upload test results
         if: always()
         uses: actions/upload-artifact@v3
@@ -49,3 +54,18 @@ jobs:
             tests/log.html
             tests/report.html
             tests/output.xml
+
+  build-rpm-package:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v3
+      - name: Build RPM package
+        run: make build-app
+      - name: upload RPM package
+        uses: actions/upload-artifact@v3
+        with:
+          name: RPM package
+          path: build/support-*.rpm
+      # Publish RPM package to Repo??
