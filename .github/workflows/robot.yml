@@ -57,5 +57,5 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: RPM package
-          path: build/support-*.rpm
+          path: build/*.rpm
       # Publish RPM package to Repo??
