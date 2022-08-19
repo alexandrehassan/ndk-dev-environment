@@ -15,7 +15,7 @@ jobs:
       - name: install containerlab
         run: bash -c "$(curl -sL https://get.containerlab.dev)"
       - name: build image
-        run: make && make build-automated-test
+        run: make build-automated-test
       - name: deploy dev and test
         run: make redeploy_all_and_test
       - name: upload test results

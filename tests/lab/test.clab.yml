@@ -1,0 +1,10 @@
+name: "support-test"
+
+topology:
+  nodes:
+    test1:
+      kind: linux
+      image: support-tests
+      binds:
+        - "../:/mnt"
+        - "../../lab/clab-support-dev/ca:/ca"

@@ -34,16 +34,16 @@ logs
 # agent binary
 build
 # source template files
-# .gen
-# ..gen
+.gen/
+..gen/
 
 venv/
 wheels/
 
 support/output/
-tests/
-!tests/lab/test.clab.yml
-!tests/Dockerfile
-!tests/requirements.txt
-!tests/srl.py
-!tests/test.robot
+# tests/
+# !tests/lab/test.clab.yml
+# !tests/Dockerfile
+# !tests/requirements.txt
+# !tests/srl.py
+# !tests/test.robot
