@@ -23,8 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [checkout]
     steps:
-      - name: Run automated tests
-        run: make automation-test
+      - name: ls
+        run: ls
+      - name: Run linting
+        run: make lint
 
   test:
     runs-on: ubuntu-latest
