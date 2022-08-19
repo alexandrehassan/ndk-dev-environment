@@ -41,9 +41,10 @@ venv/
 wheels/
 
 support/output/
-# tests/
-# !tests/lab/test.clab.yml
-# !tests/Dockerfile
-# !tests/requirements.txt
-# !tests/srl.py
-# !tests/test.robot
+tests/log.html
+tests/report.html
+tests/output.xml
+tests/debug.txt
+tests/lab/
+!tests/lab/test.clab.yml
+

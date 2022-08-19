@@ -132,7 +132,7 @@ destroy-test-lab:
 redeploy-test-lab: destroy-test-lab deploy-test-lab
 
 redeploy_all_and_test: redeploy-all redeploy-test-lab
-	docker exec -t clab-${APPNAME}-test-test1 robot -b/mnt/debug.txt test.robot
+	docker exec -ti clab-${APPNAME}-test-test1 robot -b/mnt/debug.txt test.robot
 
 test:
 	docker exec -ti clab-${APPNAME}-test-test1 robot -b/mnt/debug.txt test.robot
@@ -144,6 +144,9 @@ remove-files:
 	bash -O extglob -c 'sudo rm -r !(Dockerfile|requirements.txt)'; \
 	cd ..; \
 	sudo rm -rf logs build ${APPNAME} lab yang *.yml .venv *.py .gitignore wheels
+
+automation-test: build-automated-test redeploy-all redeploy-test-lab
+	docker exec -t clab-${APPNAME}-test-test1 robot -b/mnt/debug.txt test.robot
 
 # create dev .gitignore
 .ONESHELL:
@@ -162,7 +165,7 @@ remove-files:
 	EOF
 
 lint-yang:
-	docker run --rm -v $$(pwd):/work ghcr.io/hellt/yanglint yang/*.yang
+	docker run --rm -v $$(pwd):/work ghcr.io/hellt/yanglint ${APPNAME}/yang/*.yang
 
 lint-yaml:
 	docker run --rm -v $$(pwd):/data cytopia/yamllint -d relaxed .

@@ -7,23 +7,42 @@ on:
       - "tech-support-python"
 
 jobs:
-  test:
+  install-containerlab:
+    runs-on: ubuntu-latest
+    steps:
+      - name: install containerlab
+        run: bash -c "$(curl -sL https://get.containerlab.dev)"
+
+  checkout:
     runs-on: ubuntu-latest
     steps:
       - name: checkout repo
         uses: actions/checkout@v2
-      - name: install containerlab
-        run: bash -c "$(curl -sL https://get.containerlab.dev)"
-      - name: build image
-        run: make build-automated-test
-      - name: deploy dev and test
-        run: make redeploy_all_and_test
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: [checkout]
+    steps:
+      - name: Run automated tests
+        run: make automation-test
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [install-containerlab, checkout]
+    steps:
+      - name: Run automated tests
+        run: make automation-test
+
+  upload-artifact:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
       - name: upload test results
         if: always()
         uses: actions/upload-artifact@v2
         with:
           name: test results
           path: |
-            tests/test_results.xml
+            tests/log.html
             tests/report.html
             tests/output.xml
