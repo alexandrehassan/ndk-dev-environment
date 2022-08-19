@@ -170,4 +170,7 @@ lint-yang:
 lint-yaml:
 	docker run --rm -v $$(pwd):/data cytopia/yamllint -d relaxed .
 
-lint: lint-yang lint-yaml
+lint-python:
+	docker run --rm --volume $$(pwd)/${APPNAME}/:/src --workdir /src pyfound/black:latest_release black --check .
+
+lint: lint-yang lint-yaml lint-python

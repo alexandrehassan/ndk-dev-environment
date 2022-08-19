@@ -7,13 +7,29 @@ on:
       - "tech-support-python"
 
 jobs:
-  lint:
+  yang-lint:
     runs-on: ubuntu-latest
     steps:
       - name: checkout repo
         uses: actions/checkout@v3
       - name: Run linting
-        run: make lint
+        run: make lint-yang
+
+  yaml-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v3
+      - name: Run linting
+        run: make lint-yaml
+
+  python-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v3
+      - name: Run linting
+        run: make lint-python
 
   test:
     runs-on: ubuntu-latest
