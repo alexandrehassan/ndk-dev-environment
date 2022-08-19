@@ -7,29 +7,13 @@ on:
       - "tech-support-python"
 
 jobs:
-  yang-lint:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: checkout repo
         uses: actions/checkout@v3
       - name: Run linting
-        run: make lint-yang
-
-  yaml-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout repo
-        uses: actions/checkout@v3
-      - name: Run linting
-        run: make lint-yaml
-
-  python-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout repo
-        uses: actions/checkout@v3
-      - name: Run linting
-        run: make lint-python
+        run: make lint
 
   test:
     runs-on: ubuntu-latest
@@ -41,10 +25,11 @@ jobs:
       - name: Cache dependencies
         uses: actions/cache@v2
         with:
-          path: ~/.cache/pip
-          key: ${{ hashFiles('setup.py') }}-${{ hashFiles('dev-requirements.txt') }}
+          path: ./support/.venv
+          key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
       - name: Run automated tests
-        run: make automation-test && ls && ls support/
+        run: make automation-test
+
       - name: upload test results
         if: always()
         uses: actions/upload-artifact@v3
@@ -61,6 +46,11 @@ jobs:
     steps:
       - name: checkout repo
         uses: actions/checkout@v3
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: ./support/.venv
+          key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
       - name: Build RPM package
         run: make build-app
       - name: upload RPM package
