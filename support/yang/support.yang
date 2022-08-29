@@ -9,7 +9,25 @@ module support {
           "initial release";
     }
 
+    grouping path {
+        leaf path {
+            type string;
+            description
+              "path to the file";
+        }
+
+        leaf alias {
+            type string;
+            description
+              "alias for the file";
+        }
+    }
+
     container support {
+        list files {
+            key "path";
+            uses path;
+        }
         description
           "support container";
         leaf run {

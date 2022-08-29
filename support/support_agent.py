@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict
+from typing import Dict, Set, Tuple
 import grpc
 import json
 from datetime import datetime
@@ -40,6 +40,18 @@ class Support(BaseAgent):
         self._subscribe_to_config()
         return self
 
+    def _set_default_paths(self):
+        """Set default paths"""
+        paths = {
+            "running:/": "running",
+            "state:/": "state",
+            "show:/interface": "show_interface",
+        }
+        for path, alias in paths.items():
+            self._set_data(f"support/files[path={path}]", {"alias": alias})
+
+        # self._set_data(f"support/files[path=running:/]", {"alias": "running"})
+
     def _subscribe_to_config(self):
         """Subscribe to configuration"""
         request = sdk_service_pb2.NotificationRegisterRequest(
@@ -62,24 +74,6 @@ class Support(BaseAgent):
                 f"stream_id: {response.stream_id} sub_id: {response.sub_id}"
             )
 
-    def _set_done(self):
-        """Set done flag"""
-        logging.info("*" * 8 + " Setting Flag Value " + "*" * 8)
-        self._update_telemetry(self.path, {FLAG: "false"})
-        self._update_flag_value()
-
-    def _update_flag_value(self):
-        logging.info("*" * 8 + " Getting Flag Value " + "*" * 8)
-        # response = self._get_state_data(path=["/metric/flag"])
-        response = self._get_state_data(path=[f"/{self.name}/{FLAG}"])
-        logging.info(f"GNMI server Response: {response}")
-        try:
-            flag_value = response["notification"][0]["update"][0]["val"]
-            logging.info(f"State of flag: {flag_value}")
-            self.flag = flag_value
-        except KeyError as e:
-            logging.error(f"Server response not formatted as expected: {e}")
-
     def _handle_ConfigNotification(
         self, notification: config_service_pb2.ConfigNotification
     ) -> None:
@@ -88,20 +82,33 @@ class Support(BaseAgent):
         Args:
             config_notif: Configuration notification
         """
-        # logging.info(f"{notification}")
-        if notification.key.js_path == self.path:
+        if notification.key.js_path.startswith(self.path):
             if _is_create_notif(notification):
-                # self._get_node_info()
                 pass
             elif _is_delete_notif(notification):
                 pass
             elif _is_change_notif(notification):
-                # self._get_node_info()
-                pass
+                # self._get_specific_data()
+                logging.info(f"Change notification to path: {notification.key.js_path}")
+                self._handle_change_notification(notification)
         elif notification.key.js_path == ".commit.end":
             logging.info("Received commit end notification")
         else:
             logging.info(f"Unhandled config notification: {notification}")
+
+    def _handle_change_notification(self, notification):
+        """Handle change notification"""
+        if notification.key.js_path == self.path:
+            logging.info(f"Change to base path: {self.path}")
+            self._set_default_paths()
+            paths = self._get_paths()
+            self._get_specific_data(paths)
+        elif notification.key.js_path == f"{self.path}.files":
+            logging.info(f"Change to files path: {self.path}.files")
+        else:
+            logging.info(f"Unhandled change notification: {notification}")
+            return
+        logging.info(f"Change notification: {notification}")
 
     def _mkdir(self, name: str) -> None:
         """Make directory"""
@@ -110,46 +117,35 @@ class Support(BaseAgent):
             os.mkdir(path)
         return path
 
-    def _get_node_info(self):
-        """Writes the config found under each of the base paths to a file"""
-        logging.info("*" * 8 + " Getting Node Info " + "*" * 8)
-        response = self._get_state_data(path=PATHS)
-        # Timestamp from first response is used for all subsequent
-        # responses (convert from nanoseconds to seconds)
-        timestamp_seconds = response["notification"][0]["timestamp"] // 1000000000
-        timestamp = datetime.fromtimestamp(timestamp_seconds).strftime(TIME_F)
+    def _get_paths(self) -> Dict[str, str]:
+        """Get paths"""
+        # TODO: why is datatype needed? Shouldn't all include config??
+        response = self._get_state_data(path=["/support/files"], datatype="config")
+        logging.info(f"GNMI server Response: {response}")
+        try:
+            data = response["notification"][0]["update"][0]["val"]["files"]
+            logging.info(f"State of paths: {data}")
+            paths = {entry["alias"]: entry["path"] for entry in data}
+            return paths
+        except KeyError as e:
+            logging.error(f"Server response not formatted as expected: {e}")
 
-        # Ensure output directory exists
+    def _get_specific_data(self, paths: Dict[str, str]) -> None:
+        responses = {}
+        for name, path in paths.items():
+            responses[name] = self._get_state_data(path=[path], encoding="json_ietf")[
+                "notification"
+            ][0]["update"]
+
         self.output_path = self._mkdir("output")
-
-        # Filter out empty updates
-        responses = [r for r in response["notification"] if "update" in r]
-        for path_response in responses:
-            if len(path_response["update"]) != 1:
-                logging.error(f"Unexpected number of updates for path: {path_response}")
-            self._parse_update(path_response["update"][0], timestamp)
-
-    def _parse_update(self, update: Dict[str, Dict], timestamp: str) -> None:
-        """Parse update and write to file
-        If an update has an empty body, the update is ignored.
-        If an update has no path, recursively parse the update body.
-
-        Args:
-            update: Update to parse
-            timestamp: Timestamp of update
-        """
-        path = update["path"]
-        val = update["val"]
-        if not path:
-            for key, value in val.items():
-                self._parse_update({"path": key, "val": value}, timestamp)
-            return
-        if not val:
-            return
-        path = path.split(":")[-1]  # Remove prefix
-        logging.info(f"{self.output_path}/{timestamp}-{path}.json")
-        with open(f"{self.output_path}/{timestamp}-{path}.json", "w") as f:
-            f.write(json.dumps(val))
+        try:
+            for name, response in responses.items():
+                with open(f"{self.output_path}/{name}.json", "w") as f:
+                    f.write(json.dumps(response, indent=4))
+        except Exception as e:
+            logging.error(
+                f"Error writing output: {e} :: {name} :: {type(response)} :: {response}"
+            )
 
     def run(self):
         try:

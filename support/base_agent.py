@@ -112,14 +112,32 @@ class BaseAgent(object):
         self.channel.close()
 
     def _handle_sigterm(self, *arg):
-        logging.info("Handle SIGTERM")
+        """Agent recieved SIGTERM signal.
+        Clean up and exit.
+        """
+        logging.info("Revied SIGTERM, exiting")
+        # Unregister agent
+        unregister_request = sdk_service_pb2.AgentRegistrationRequest()
+        unregister_response = self.sdk_mgr_client.AgentUnRegister(
+            request=unregister_request, metadata=self.metadata
+        )
+        if unregister_response.status == sdk_status.kSdkMgrSuccess:
+            logging.info("Agent unregistered successfully")
+        else:
+            logging.warning("Agent unregistration failed")
         sys.exit()
 
     def _handle_sighup(self, *arg):
+        """Agent recieved SIGHUP signal.
+        Reload configuration.
+        """
         logging.info("Handle SIGHUP")
         logging.info("Reload config not implemented")
 
     def _handle_sigquit(self, *arg):
+        """Agent recieved SIGQUIT signal.
+        Terminate and generate a core dump.
+        """
         logging.info("Handle SIGQUIT")
         logging.info("Stop and dump not implemented")
 
@@ -176,6 +194,8 @@ class BaseAgent(object):
         username: str = "admin",
         password: str = "admin",
         insecure: bool = True,
+        encoding: str = "json_ietf",
+        datatype: str = "all",
     ) -> dict:
         """Get state data from gNMI server.
         Args:
@@ -208,7 +228,42 @@ class BaseAgent(object):
             password=password,
             insecure=insecure,
         ) as client:
-            return client.get(path=path, encoding="json_ietf")
+            return client.get(path=path, encoding=encoding, datatype=datatype)
+
+    def _set_data(
+        self,
+        path: List[str],
+        data: str,
+        target_path: str = "unix:///opt/srlinux/var/run/sr_gnmi_server",
+        target_port: int = 57400,
+        username: str = "admin",
+        password: str = "admin",
+        insecure: bool = True,
+        encoding: str = "json_ietf",
+    ):
+        """Set data on gNMI server.
+        Args:
+            path: Path to state data.
+            target_path: Path to gNMI server.
+            target_port: Port of gNMI server.
+            username: Username for gNMI server.
+            password: Password for gNMI server.
+            insecure: Whether to use insecure TLS.
+        """
+        logging.info(f"Setting data on gNMI server: {target_path}:{target_port}")
+        logging.info(f"Path: {path}")
+        logging.info(f"Data: {data}")
+        try:
+            with gNMIclient(
+                target=(target_path, 57400),
+                username=username,
+                password=password,
+                insecure=insecure,
+            ) as client:
+                return client.set(update=[(path, data)], encoding=encoding)
+        except Exception as e:
+            logging.error(f"Error setting data on gNMI server: {e.message} ")
+            return None
 
     def _handle_notification(self, notification: sdk_service_pb2.Notification):
         """
