@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Any, Dict
 import grpc
 import json
@@ -12,7 +11,8 @@ from ndk import config_service_pb2
 from ndk import sdk_common_pb2 as sdk_common
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
-FLAG = "run"
+from uploader import Archive
+
 PATHS = [
     "acl",
     "bfd",
@@ -99,7 +99,9 @@ class Support(BaseAgent):
             logging.info(f"Change to base path: {self.path}")
             self._set_default_paths()
             paths = self._get_paths()
-            self._get_specific_data(paths)
+            data = self._get_specific_data(paths)
+            self._archive_data(data)
+            # Archive().upload_all(self.output_path)
         elif notification.key.js_path == f"{self.path}.files":
             logging.info(f"Change to files path: {self.path}.files")
         else:
@@ -107,33 +109,36 @@ class Support(BaseAgent):
             return
         logging.info(f"Change notification: {notification}")
 
-    def _mkdir(self, name: str) -> None:
-        """Make directory"""
-        path = os.path.join(os.path.dirname(__file__), name)
-        if not os.path.exists(path):
-            os.mkdir(path)
-        return path
-
-    def _get_data(self, path: str, datatype: str = "all") -> Dict[str, Any]:
+    def _get_response_val(self, path: str, datatype: str = "all") -> Dict[str, Any]:
         """Helper method to get only the queried data and not the whole response"""
         response = self._get_data(path=[path], datatype=datatype)
-        logging.info(f"GNMI server Response: {response}")
         return response["notification"][0]["update"][0]["val"]
 
     def _get_paths(self) -> Dict[str, str]:
         """Get paths"""
         # TODO: why is datatype needed? Shouldn't all include config??
-        data = self._get_data("/support/files", datatype="config")["files"]
+        data = self._get_response_val("/support/files", datatype="config")["files"]
         return {entry["alias"]: entry["path"] for entry in data}
 
-    def _get_specific_data(self, paths: Dict[str, str]) -> None:
-        responses = {alias: self._get_data(path=path) for alias, path in paths.items()}
+    def _get_specific_data(self, paths: Dict[str, str]) -> Dict[str, Dict[str, str]]:
+        responses = {
+            alias: self._get_response_val(path=path) for alias, path in paths.items()
+        }
 
-        self.output_path = self._mkdir("output")
         time = datetime.now().strftime(TIME_F)
-        for name, response in responses.items():
-            with open(f"{self.output_path}/{time}-{name}.json", "w") as f:
-                f.write(json.dumps(response, indent=4))
+        # for name, response in responses.items():
+        #     with open(f"{self.output_path}/{time}-{name}.json", "w") as f:
+        #         f.write(json.dumps(response, indent=4))
+        data = {
+            f"{time}-{name}.json": {"content": json.dumps(response, indent=4)}
+            for name, response in responses.items()
+        }
+        return data
+
+    def _archive_data(self, data: Dict[str, Dict[str, str]]) -> None:
+        """Archive data"""
+        # Gists().upload_all("support agent output", data)
+        Archive().upload_all("archive", data)
 
     def run(self):
         try:
