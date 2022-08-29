@@ -186,7 +186,7 @@ class BaseAgent(object):
             for notification in response.notification:
                 yield notification
 
-    def _get_state_data(
+    def _get_data(
         self,
         path: List[str],
         target_path: str = "unix:///opt/srlinux/var/run/sr_gnmi_server",
@@ -250,12 +250,12 @@ class BaseAgent(object):
             password: Password for gNMI server.
             insecure: Whether to use insecure TLS.
         """
-        logging.info(f"Setting data on gNMI server: {target_path}:{target_port}")
-        logging.info(f"Path: {path}")
-        logging.info(f"Data: {data}")
+        logging.info(
+            f"Setting data on gNMI server: {target_path}:{target_port} - {path} - {data}"
+        )
         try:
             with gNMIclient(
-                target=(target_path, 57400),
+                target=(target_path, target_port),
                 username=username,
                 password=password,
                 insecure=insecure,
@@ -271,7 +271,7 @@ class BaseAgent(object):
         """
         data = {field.name: value for field, value in notification.ListFields()}
         sub_id = data["sub_id"]
-        logging.info(f"sub_id: {sub_id}")
+        logging.debug(f"sub_id: {sub_id}")
 
         if "config" in data:
             self._handle_ConfigNotification(data["config"])

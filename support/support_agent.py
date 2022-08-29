@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict, Set, Tuple
+from typing import Any, Dict
 import grpc
 import json
 from datetime import datetime
@@ -27,7 +27,7 @@ PATHS = [
     "support",
 ]
 
-TIME_F = "%Y-%m-%d %H.%M.%S"
+TIME_F = "%Y-%m-%d-%H.%M.%S"
 
 
 class Support(BaseAgent):
@@ -49,8 +49,6 @@ class Support(BaseAgent):
         }
         for path, alias in paths.items():
             self._set_data(f"support/files[path={path}]", {"alias": alias})
-
-        # self._set_data(f"support/files[path=running:/]", {"alias": "running"})
 
     def _subscribe_to_config(self):
         """Subscribe to configuration"""
@@ -88,7 +86,6 @@ class Support(BaseAgent):
             elif _is_delete_notif(notification):
                 pass
             elif _is_change_notif(notification):
-                # self._get_specific_data()
                 logging.info(f"Change notification to path: {notification.key.js_path}")
                 self._handle_change_notification(notification)
         elif notification.key.js_path == ".commit.end":
@@ -117,35 +114,26 @@ class Support(BaseAgent):
             os.mkdir(path)
         return path
 
+    def _get_data(self, path: str, datatype: str = "all") -> Dict[str, Any]:
+        """Helper method to get only the queried data and not the whole response"""
+        response = self._get_data(path=[path], datatype=datatype)
+        logging.info(f"GNMI server Response: {response}")
+        return response["notification"][0]["update"][0]["val"]
+
     def _get_paths(self) -> Dict[str, str]:
         """Get paths"""
         # TODO: why is datatype needed? Shouldn't all include config??
-        response = self._get_state_data(path=["/support/files"], datatype="config")
-        logging.info(f"GNMI server Response: {response}")
-        try:
-            data = response["notification"][0]["update"][0]["val"]["files"]
-            logging.info(f"State of paths: {data}")
-            paths = {entry["alias"]: entry["path"] for entry in data}
-            return paths
-        except KeyError as e:
-            logging.error(f"Server response not formatted as expected: {e}")
+        data = self._get_data("/support/files", datatype="config")["files"]
+        return {entry["alias"]: entry["path"] for entry in data}
 
     def _get_specific_data(self, paths: Dict[str, str]) -> None:
-        responses = {}
-        for name, path in paths.items():
-            responses[name] = self._get_state_data(path=[path], encoding="json_ietf")[
-                "notification"
-            ][0]["update"]
+        responses = {alias: self._get_data(path=path) for alias, path in paths.items()}
 
         self.output_path = self._mkdir("output")
-        try:
-            for name, response in responses.items():
-                with open(f"{self.output_path}/{name}.json", "w") as f:
-                    f.write(json.dumps(response, indent=4))
-        except Exception as e:
-            logging.error(
-                f"Error writing output: {e} :: {name} :: {type(response)} :: {response}"
-            )
+        time = datetime.now().strftime(TIME_F)
+        for name, response in responses.items():
+            with open(f"{self.output_path}/{time}-{name}.json", "w") as f:
+                f.write(json.dumps(response, indent=4))
 
     def run(self):
         try:
@@ -156,7 +144,6 @@ class Support(BaseAgent):
         except grpc._channel._Rendezvous as err:
             logging.error(f"Handling grpc exception: {err}")
         except Exception as e:
-            # logging.error(f"General exception caught :: {e}")
             raise e
         finally:
             logging.info("End of notification stream reading")
