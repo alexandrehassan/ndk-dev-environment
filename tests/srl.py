@@ -31,3 +31,19 @@ class srl:
             encoding=enc,
         )
         return result["notification"][0]["update"][0]["val"]
+
+    def get_agent_paths(self):
+        result = self.gc.get(
+            path=["/support/files"],
+            encoding=enc,
+            datatype="config",
+        )
+        return result["notification"][0]["update"][0]["val"]["files"]
+
+    def default_paths(self):
+        paths = {
+            "running:/": "running",
+            "state:/": "state",
+            "show:/interface": "show_interface",
+        }
+        return [{"path": path, "alias": alias} for path, alias in paths.items()]
