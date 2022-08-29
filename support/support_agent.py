@@ -74,16 +74,17 @@ class Support(BaseAgent):
                 pass
             elif _is_change_notif(notification):
                 logging.info(f"Change notification to path: {notification.key.js_path}")
-                self._handle_change_notification(notification)
+                self._handle_config_change(notification)
         elif notification.key.js_path == ".commit.end":
             logging.info("Received commit end notification")
         else:
             logging.info(f"Unhandled config notification: {notification}")
 
-    def _handle_change_notification(self, notification):
+    def _handle_config_change(self, notification):
         """Handle change notification"""
         if notification.key.js_path == self.path:
             logging.info(f"Change to base path: {self.path}")
+            # TODO: Find a better way to trigger these.
             self._set_default_paths()
             paths = self._get_paths()
             data = self._get_path_data(paths)
@@ -135,7 +136,8 @@ class Support(BaseAgent):
 
     def _archive_data(self, data: Dict[str, Dict[str, str]]) -> None:
         """Archive data"""
-        # Gists().upload_all("support agent output", data)
+        # TODO: Multiple archive methods should be implemented, how to
+        #      configure/select the method to use?
         Archive().upload_all("archive", data)
 
     def run(self):

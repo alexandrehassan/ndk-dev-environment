@@ -54,7 +54,7 @@ jobs:
       - name: Build RPM package
         run: make build-app
       - name: look for file
-        run: ls && echo 'split\n' && ls build/
+        run: ls -F && echo 'split\n' && ls build/
       - name: upload RPM package
         uses: actions/upload-artifact@v3
         with:
