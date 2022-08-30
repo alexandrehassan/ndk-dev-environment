@@ -36,7 +36,7 @@ Test agent running
 
 Test agent stop
     stop_agent
-    Wait Until Keyword Succeeds    30x    1s
+    Wait Until Keyword Succeeds    30x    10s
     ...    Agent Should Not Run
     Sleep    5
 

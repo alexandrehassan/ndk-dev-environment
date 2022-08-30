@@ -11,7 +11,7 @@ from ndk import config_service_pb2
 from ndk import sdk_common_pb2 as sdk_common
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
-from uploader import Archive
+import uploader
 
 
 TIME_FORMAT = "%Y-%m-%d-%H.%M.%S"
@@ -138,7 +138,7 @@ class Support(BaseAgent):
         """Archive data"""
         # TODO: Multiple archive methods should be implemented, how to
         #      configure/select the method to use?
-        Archive().upload_all("archive", data)
+        uploader.Archive().upload_all("archive", data)
 
     def run(self):
         try:
