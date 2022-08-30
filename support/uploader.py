@@ -40,7 +40,7 @@ class Archive(Uploader):
 
 class Gists(Uploader):
     def __init__(self):
-        with open("support/.oauth", "r") as file:
+        with open(".oauth", "r") as file:
             self.oauth = file.read()
 
     def _headers(self):
@@ -82,3 +82,6 @@ def test_gists():
 
     print(json_res)
     logging.info(json_res)
+
+
+test_gists()

@@ -262,9 +262,7 @@ class BaseAgent(object):
             password: Password for gNMI server.
             insecure: Whether to use insecure TLS.
         """
-        logging.info(
-            f"Setting data on gNMI server: {target_path}:{target_port} - {path} - {data}"
-        )
+        logging.info(f"Setting data on gNMI server - {path} - {data}")
         try:
             with gNMIclient(
                 target=(target_path, target_port),
