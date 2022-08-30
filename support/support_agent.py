@@ -122,7 +122,15 @@ class Support(BaseAgent):
         def _query(path: str) -> Dict[str, Any]:
             """Query the path and return the data"""
             logging.info(f"Querying path: {path}")
-            data = self._get_data(path=[path])["notification"][0]["update"][0]["val"]
+            try:
+                data = self._get_data([path])["notification"][0]["update"][0]["val"]
+            except grpc.RpcError as e:
+                logging.error(f"Failed to query path: {path}")
+                logging.debug(f"Failed to query path: {path} :: {e}")
+                return {}
+            except Exception as e:
+                logging.error(f"Failed to query path: {path} :: {e}")
+                return {}
             return data
 
         responses = {alias: _query(path) for alias, path in paths.items()}

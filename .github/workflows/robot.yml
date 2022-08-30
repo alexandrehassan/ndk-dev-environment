@@ -29,7 +29,6 @@ jobs:
           key: ${{ runner.os }}-venv-${{ hashFiles('requirements.txt') }}
       - name: Run automated tests
         run: make automation-test
-
       - name: upload test results
         if: always()
         uses: actions/upload-artifact@v3

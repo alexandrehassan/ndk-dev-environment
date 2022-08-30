@@ -48,3 +48,4 @@ tests/debug.txt
 tests/lab/
 !tests/lab/test.clab.yml
 
+.oauth
