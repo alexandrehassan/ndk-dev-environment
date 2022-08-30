@@ -15,24 +15,27 @@ from ndk import sdk_service_pb2
 from ndk import sdk_service_pb2_grpc
 from ndk import telemetry_service_pb2_grpc
 from ndk import telemetry_service_pb2
-from ndk.config_service_pb2 import ConfigNotification
-from ndk.interface_service_pb2 import InterfaceNotification
-from ndk.networkinstance_service_pb2 import NetworkInstanceNotification
-from ndk.lldp_service_pb2 import LldpNeighborNotification
-from ndk.bfd_service_pb2 import BfdSessionNotification
-from ndk.route_service_pb2 import IpRouteNotification
-from ndk.appid_service_pb2 import AppIdentNotification
-from ndk.nexthop_group_service_pb2 import NextHopGroupNotification
+from ndk.interface_service_pb2 import (
+    InterfaceNotification,
+    InterfaceSubscriptionRequest,
+)
+from ndk.networkinstance_service_pb2 import (
+    NetworkInstanceNotification,
+    NetworkInstanceSubscriptionRequest,
+)
+from ndk.lldp_service_pb2 import (
+    LldpNeighborNotification,
+    LldpNeighborSubscriptionRequest,
+)
+from ndk.config_service_pb2 import ConfigNotification, ConfigSubscriptionRequest
+from ndk.bfd_service_pb2 import BfdSessionNotification, BfdSessionSubscriptionRequest
+from ndk.route_service_pb2 import IpRouteNotification, IpRouteSubscriptionRequest
+from ndk.appid_service_pb2 import AppIdentNotification, AppIdentSubscriptionRequest
+from ndk.nexthop_group_service_pb2 import (
+    NextHopGroupNotification,
+    NextHopGroupSubscriptionRequest,
+)
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
-
-from ndk.interface_service_pb2 import InterfaceSubscriptionRequest
-from ndk.networkinstance_service_pb2 import NetworkInstanceSubscriptionRequest
-from ndk.lldp_service_pb2 import LldpNeighborSubscriptionRequest
-from ndk.config_service_pb2 import ConfigSubscriptionRequest
-from ndk.bfd_service_pb2 import BfdSessionSubscriptionRequest
-from ndk.route_service_pb2 import IpRouteSubscriptionRequest
-from ndk.appid_service_pb2 import AppIdentSubscriptionRequest
-from ndk.nexthop_group_service_pb2 import NextHopGroupSubscriptionRequest
 
 
 class BaseAgent(object):
