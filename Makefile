@@ -106,6 +106,7 @@ restart-app_mgr:
 
 #Generate the venv used in the rpm
 build-venv: wheels
+	mkdir ${BIN_DIR}; \
 	cd ${APPNAME}; \
 	docker run --rm -v $$(pwd):/opt/${APPNAME} -w /opt/${APPNAME} --entrypoint 'bash' ghcr.io/nokia/srlinux:latest -c "sudo python3 -m venv .venv && source .venv/bin/activate && pip3 install --no-cache --no-index wheels/pip* && pip3 install --no-cache --no-index wheels/*"
 
