@@ -5,16 +5,19 @@ import json
 from datetime import datetime
 
 from base_agent import BaseAgent
+import uploader
 
-from ndk import sdk_service_pb2
 from ndk import config_service_pb2
 from ndk import sdk_common_pb2 as sdk_common
-from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
-
-import uploader
 
 
 TIME_FORMAT = "%Y-%m-%d-%H.%M.%S"
+
+DEFAULT_PATHS = {
+    "running:/": "running",
+    "state:/": "state",
+    "show:/interface": "show_interface",
+}
 
 
 class Support(BaseAgent):
@@ -29,35 +32,15 @@ class Support(BaseAgent):
 
     def _set_default_paths(self):
         """Set default paths"""
-        paths = {
-            "running:/": "running",
-            "state:/": "state",
-            "show:/interface": "show_interface",
-        }
-        for path, alias in paths.items():
+
+        for path, alias in DEFAULT_PATHS.items():
             self._set_data(f"support/files[path={path}]", {"alias": alias})
 
     def _subscribe_to_config(self):
         """Subscribe to configuration"""
-        request = sdk_service_pb2.NotificationRegisterRequest(
-            stream_id=self.stream_id,
-            op=sdk_service_pb2.NotificationRegisterRequest.AddSubscription,
-            config=config_service_pb2.ConfigSubscriptionRequest(),
+        self._register_for_notifications(
+            config_request=config_service_pb2.ConfigSubscriptionRequest()
         )
-
-        response = self.sdk_mgr_client.NotificationRegister(
-            request=request, metadata=self.metadata
-        )
-        if response.status == sdk_status.kSdkMgrSuccess:
-            logging.info(
-                f"Subscribed to config successfully :: "
-                f"stream_id: {response.stream_id} sub_id: {response.sub_id}"
-            )
-        else:
-            logging.error(
-                f"Failed to subscribe to config :: "
-                f"stream_id: {response.stream_id} sub_id: {response.sub_id}"
-            )
 
     def _handle_ConfigNotification(
         self, notification: config_service_pb2.ConfigNotification

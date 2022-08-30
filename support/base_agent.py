@@ -25,6 +25,15 @@ from ndk.appid_service_pb2 import AppIdentNotification
 from ndk.nexthop_group_service_pb2 import NextHopGroupNotification
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
+from ndk.interface_service_pb2 import InterfaceSubscriptionRequest
+from ndk.networkinstance_service_pb2 import NetworkInstanceSubscriptionRequest
+from ndk.lldp_service_pb2 import LldpNeighborSubscriptionRequest
+from ndk.config_service_pb2 import ConfigSubscriptionRequest
+from ndk.bfd_service_pb2 import BfdSessionSubscriptionRequest
+from ndk.route_service_pb2 import IpRouteSubscriptionRequest
+from ndk.appid_service_pb2 import AppIdentSubscriptionRequest
+from ndk.nexthop_group_service_pb2 import NextHopGroupSubscriptionRequest
+
 
 class BaseAgent(object):
     def __init__(self, name):
@@ -264,6 +273,57 @@ class BaseAgent(object):
         except Exception as e:
             logging.error(f"Error setting data on gNMI server: {e.message} ")
             return None
+
+    def _register_for_notifications(
+        self,
+        intf_request: InterfaceSubscriptionRequest = None,
+        nw_request: NetworkInstanceSubscriptionRequest = None,
+        lldp_neighbor_request: LldpNeighborSubscriptionRequest = None,
+        config_request: ConfigSubscriptionRequest = None,
+        bfd_session_request: BfdSessionSubscriptionRequest = None,
+        route_request: IpRouteSubscriptionRequest = None,
+        appid_request: AppIdentSubscriptionRequest = None,
+        nhg_request: NextHopGroupSubscriptionRequest = None,
+    ):
+        """Agent subscribes to notifications from the SDK Manager.
+
+        Args:
+            intf_request: InterfaceSubscriptionRequest object.
+            nw_request: NetworkInstanceSubscriptionRequest object.
+            lldp_neighbor_request: LldpSubscriptionRequest object.
+            config_request: ConfigSubscriptionRequest object.
+            bfd_session_request: BfdSubscriptionRequest object.
+            route_request: IpRouteSubscriptionRequest object.
+            appid_request: AppIdentSubscriptionRequest object.
+            nhg_request: NextHopGroupSubscriptionRequest object.
+
+        Returns:
+            True if subscription is successful, False otherwise.
+        """
+
+        request = sdk_service_pb2.NotificationRegisterRequest(
+            stream_id=self.stream_id,
+            op=sdk_service_pb2.NotificationRegisterRequest.AddSubscription,
+            intf=intf_request,
+            nw_inst=nw_request,
+            lldp_neighbor=lldp_neighbor_request,
+            config=config_request,
+            bfd_session=bfd_session_request,
+            route=route_request,
+            appid=appid_request,
+            nhg=nhg_request,
+        )
+
+        response = self.sdk_mgr_client.NotificationRegister(
+            request=request, metadata=self.metadata
+        )
+        success = response.status == sdk_status.kSdkMgrSuccess
+        msg_str = f"stream_id: {response.stream_id} sub_id: {response.sub_id}"
+        if success:
+            logging.info(f"Subscribed successfully :: {msg_str}")
+        else:
+            logging.error(f"Failed to subscribe :: {msg_str}")
+        return response.status == sdk_status.kSdkMgrSuccess
 
     def _handle_notification(self, notification: sdk_service_pb2.Notification):
         """
