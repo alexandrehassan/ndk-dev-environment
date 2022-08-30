@@ -129,7 +129,7 @@ class Support(BaseAgent):
         """Archive data"""
         # TODO: Multiple archive methods should be implemented, how to
         #      configure/select the method to use?
-        uploader.Gists().upload_all("archive", data)
+        uploader.archive("archive", data)
 
     def run(self):
         try:

@@ -1,5 +1,5 @@
 import shutil
-from typing import Any, Dict
+from typing import Dict
 import os
 import requests
 import logging
@@ -8,72 +8,52 @@ import json
 GITHUB_GIST = "https://api.github.com/gists"
 
 
-class Uploader:
-    def _mkdir(self, name: str) -> None:
-        """Make directory"""
-        path = os.path.join(os.path.dirname(__file__), name)
-        if not os.path.exists(path):
-            os.mkdir(path)
-        return path
-
-    def upload(self, file):
-        print("Uploading file: " + file)
-
-    def upload_all(self, name: str, data: Dict[str, Dict[str, str]]):
-        # for file in files:
-        #     self.upload(file)
-        pass
+def _mkdir(name: str) -> None:
+    """Make directory"""
+    path = os.path.join(os.path.dirname(__file__), name)
+    if not os.path.exists(path):
+        os.mkdir(path)
+    return path
 
 
-class Archive(Uploader):
-    def upload(self, file):
-        print("Archiving file: " + file)
-
-    def upload_all(self, name: str, data: Dict[str, Dict[str, str]]):
-        # print("Archiving files: " + str(directory))
-        self._mkdir("output")
-        for filename, content in data.items():
-            with open(f"output/{filename}", "w") as f:
-                f.write(content["content"])
-        shutil.make_archive("output/archive", "tar", "output")
+def archive(name: str, data: Dict[str, Dict[str, str]], protocol: str = "tar") -> None:
+    _mkdir("output")
+    for filename, content in data.items():
+        with open(f"output/{filename}", "w") as f:
+            f.write(content["content"])
+    shutil.make_archive(f"output/{name}", protocol, "output")
 
 
-class Gists(Uploader):
-    def __init__(self):
+def upload_to_gists(name: str, files: Dict[str, str], oauth: str) -> None:
+    """Upload files to GitHub Gists
+
+    Args:
+        name: Name of the gist
+        files: Files to upload
+        oauth: GitHub OAuth token
+    """
+    # TODO: This is temporary
+    if not oauth:
         with open(".oauth", "r") as file:
-            self.oauth = file.read()
-
-    def _headers(self):
-        return {
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"token {self.oauth}",
-        }
-
-    def _params(self):
-        return {"scope": "gist"}
-
-    def _payload(self, name: str, files: Dict[str, str]) -> Dict[str, Any]:
-        return {
-            "description": name,
-            "public": False,
-            "files": files,
-        }
-
-    def upload_all(self, name: str, files: Dict[str, str]):
-        try:
-            test_gists()
-            response = requests.post(
-                GITHUB_GIST,
-                headers=self._headers(),
-                params=self._params(),
-                json=self._payload(name, files),
-            )
-            print(f"code: {response.status_code}, response: {response.text}")
-            logging.info(f"code: {response.status_code}")
-        except ConnectionError as e:
-            logging.error(f"ConnectionError: {e}")
-        except Exception as e:
-            logging.error(f"Exception: {e}")
+            oauth = file.read()
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"token {oauth}",
+    }
+    params = {"scope": "gist"}
+    payload = {
+        "description": name,
+        "public": False,
+        "files": files,
+    }
+    response = requests.post(
+        GITHUB_GIST,
+        headers=headers,
+        params=params,
+        json=payload,
+    )
+    print(f"code: {response.status_code}, response: {response.text}")
+    logging.info(f"code: {response.status_code}")
 
 
 def test_gists():
