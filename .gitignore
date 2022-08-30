@@ -49,3 +49,4 @@ tests/lab/
 !tests/lab/test.clab.yml
 
 .oauth
+.gnmic/
