@@ -50,13 +50,14 @@ venv:
 # built with srlinux image to guarantee compatibility with NOS
 .PHONY: wheels
 wheels:
-	docker run --rm -v $$(pwd):/work -w /work --entrypoint 'bash' ghcr.io/nokia/srlinux:latest -c "sudo python3 -m pip install -U pip wheel && sudo pip3 wheel pip wheel -r requirements.txt --no-cache --wheel-dir $(APPNAME)/wheels"
+	docker run --rm -v $$(pwd):/work -w /work --entrypoint 'bash' ghcr.io/nokia/srlinux:latest -c \
+	"sudo python3 -m pip install -U -qqq pip wheel && sudo python3 -m pip wheel pip wheel -r requirements.txt --no-cache -qqq --wheel-dir $(APPNAME)/wheels"
 
 # setting up venv on srl1/srl2 containers
 remote-venv: wheels
 	cd lab; \
-	sudo clab exec -t $(LABFILE) --label clab-node-kind=srl --cmd "bash -c \"sudo python3 -m venv /opt/${APPNAME}/.venv \
-&& source /opt/${APPNAME}/.venv/bin/activate && pip3 install --no-cache --no-index /opt/${APPNAME}/wheels/pip* && pip3 install --no-cache --no-index /opt/${APPNAME}/wheels/*\""
+	sudo clab exec -t $(LABFILE) --label clab-node-kind=srl --cmd \
+	"bash -c \"sudo python3 -m venv /opt/${APPNAME}/.venv && source /opt/${APPNAME}/.venv/bin/activate && python3 -m pip install -qqq --no-cache --no-index /opt/${APPNAME}/wheels/pip* && python3 -m pip install -qqq --no-cache --no-index /opt/${APPNAME}/wheels/*\""
 
 destroy-lab:
 	cd lab; \
