@@ -1,8 +1,9 @@
+import logging
 import shutil
 from typing import Dict
 import os
 import requests
-import logging
+
 import json
 
 GITHUB_GIST = "https://api.github.com/gists"
@@ -64,4 +65,8 @@ def test_gists():
     logging.info(json_res)
 
 
-test_gists()
+# try:
+#     test_gists()
+# except Exception as e:
+#     print(e)
+#     logging.error(e)
