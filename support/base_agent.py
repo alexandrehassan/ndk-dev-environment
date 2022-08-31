@@ -8,8 +8,10 @@ import sys
 import logging
 import signal
 import json
+import time
 
 from pygnmi.client import gNMIclient
+from pyroute2 import netns
 
 from ndk import sdk_service_pb2
 from ndk import sdk_service_pb2_grpc
@@ -426,3 +428,31 @@ class BaseAgent(object):
         """
         logging.warning("NextHopGroupNotification handling not implemented")
         logging.info(f"Received NextHopGroupNotification: {notification}")
+
+    def _change_netns(
+        self, netns_name: str, timeout: int = 10, interval: int = 1
+    ) -> bool:
+        """
+        Changes network namespace to the specified name.
+
+        Args:
+            netns_name: Name of the network namespace.
+            timeout: Maximum time to wait for the network namespace to be changed.
+            interval: Retry interval in seconds.
+
+        Returns:
+            True if network namespace is changed, False otherwise.
+        """
+        while True:
+            if netns_name in netns.listnetns():
+                logging.info(f"Changing network namespace to {netns_name}")
+                netns.setns(netns_name)
+                return True
+            # TODO: Can we use a better way to check if the network namespace is
+            #  available? For now this is a blocking call.
+            else:
+                time.sleep(interval)
+                timeout -= interval
+                if timeout <= 0:
+                    logging.error(f"Failed to change network namespace to {netns_name}")
+                    return False

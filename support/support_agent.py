@@ -133,6 +133,7 @@ class Support(BaseAgent):
 
     def run(self):
         try:
+            self._change_netns("srbase-mgmt")
             for obj in self._get_notifications():
                 self._handle_notification(obj)
         except SystemExit:
