@@ -12,7 +12,7 @@ from ndk import sdk_common_pb2 as sdk_common
 
 
 TIME_FORMAT = "%Y-%m-%d-%H.%M.%S"
-
+NET_NS = "srbase-mgmt"
 DEFAULT_PATHS = {
     "running:/": "running",
     "state:/": "state",
@@ -129,11 +129,17 @@ class Support(BaseAgent):
         """Archive data"""
         # TODO: Multiple archive methods should be implemented, how to
         #      configure/select the method to use?
-        uploader.archive("archive", data)
+
+        uploader.archive_and_scp(
+            "172.20.20.1", "root" "/root/git/ndk-dev-environment/", data
+        )
 
     def run(self):
         try:
-            self._change_netns("srbase-mgmt")
+            if self._change_netns(NET_NS):
+                logging.info(f"Changed to network namespace: {NET_NS}")
+            # else:
+            #     return
             for obj in self._get_notifications():
                 self._handle_notification(obj)
         except SystemExit:

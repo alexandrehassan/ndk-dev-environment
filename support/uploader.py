@@ -3,6 +3,9 @@ import shutil
 from typing import Dict
 import os
 import requests
+import paramiko
+from paramiko import SSHClient
+from scp import SCPClient
 
 import json
 
@@ -18,6 +21,14 @@ def _mkdir(name: str) -> None:
 
 
 def archive(name: str, data: Dict[str, Dict[str, str]], protocol: str = "tar") -> None:
+    """Write data to an archive
+
+    Args:
+        name: Name of the archive
+        data: Data to archive in the format:
+            {"filename": {"content": "file contents"}}
+        protocol: Archive protocol to use
+    """
     _mkdir("output")
     for filename, content in data.items():
         with open(f"output/{filename}", "w") as f:
@@ -65,8 +76,42 @@ def test_gists():
     logging.info(json_res)
 
 
-# try:
-#     test_gists()
-# except Exception as e:
-#     print(e)
-#     logging.error(e)
+class SshConnection:
+    """Wrapper for SSHClient.connect allowing to use it as a context manager"""
+
+    def __init__(self, server: str, username: str) -> None:
+        self._client = SSHClient()
+        # self._client.load_system_host_keys("/home/admin/.ssh/known_hosts")
+        self._client.load_system_host_keys()
+        self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.server = server
+        self.username = username
+
+    def __enter__(self):
+        self._client.connect(self.server, username=self.username)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if self._client:
+            self._client.close()
+
+    def scp_put(self, filename: str, destination: str) -> None:
+        """Upload file to server"""
+        with SCPClient(self._client.get_transport()) as scp:
+            scp.put(filename, destination)
+
+
+def scp_to_server(server: str, username: str, filename: str, destination: str) -> None:
+    """SCP files to server"""
+    with SshConnection(server, username) as ssh:
+        ssh.scp_put(filename, destination)
+
+
+def archive_and_scp(
+    server: str,
+    destination: str,
+    data: Dict[str, Dict[str, str]],
+    protocol: str = "tar",
+) -> None:
+    archive("archive", data, protocol)
+    scp_to_server(server, f"output/archive.{protocol}", destination)

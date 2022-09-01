@@ -24,12 +24,12 @@ module support {
     }
 
     container support {
+        description
+          "support container";
         list files {
             key "path";
             uses path;
         }
-        description
-          "support container";
         leaf run {
             type boolean;
             default false;
