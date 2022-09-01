@@ -2,6 +2,7 @@
 Library           srl.py
 Library           SSHLibrary
 Library           String
+Library           OperatingSystem
 
 *** Keywords ***
 Write SRL Command
@@ -18,8 +19,8 @@ Open SRL Bash
 
 Agent Defaults
     ${result}=    get_agent_paths
-    ${expected}= default_paths
-    Should Be Equal    ${result}    ${expected}
+    ${expected}=    expected_paths
+    default_paths_set    ${result}    ${expected}
 
 Agent Should Run
     ${result}=    get_agent_status
@@ -30,23 +31,33 @@ Agent Should Not Run
     Should Not Be Equal    ${result}    running
 
 *** Test Cases ***
-Test agent running
+# Test agent running
+#     Wait Until Keyword Succeeds    30x    1s
+#     ...    Agent Should Run
+
+# Test agent stop
+#     stop_agent
+#     Wait Until Keyword Succeeds    30x    10s
+#     ...    Agent Should Not Run
+#     Sleep    5
+
+# Test agent start
+#     start_agent
+#     Wait Until Keyword Succeeds    30x    1s
+#     ...    Agent Should Run
+#     Sleep    5
+    
+Test agent defaults
+   Wait Until Keyword Succeeds    30x    1s
+   ...    Agent Should Run
+   Wait Until Keyword Succeeds    5x    1s
+   ...    Agent Defaults
+
+Test agent archive
     Wait Until Keyword Succeeds    30x    1s
     ...    Agent Should Run
-
-Test agent stop
-    stop_agent
-    Wait Until Keyword Succeeds    30x    10s
-    ...    Agent Should Not Run
-    Sleep    5
-
-Test agent start
-    start_agent
-    Wait Until Keyword Succeeds    30x    1s
-    ...    Agent Should Run
-    Sleep    5
-# Test agent defaults
-#    Wait Until Keyword Succeeds    30x    1s
-#    ...    Agent Should Run
-#    Wait Until Keyword Succeeds    30x    1s
-#    ...    Agent Defaults
+    OperatingSystem.File Should not exist    output/archive.tar
+    trigger_agent
+    Sleep   5
+    OperatingSystem.File Should exist    output/archive.tar
+    

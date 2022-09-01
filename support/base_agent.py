@@ -2,7 +2,7 @@
 # coding=utf-8
 
 from types import TracebackType
-from typing import Generator, List, Optional, Type
+from typing import Generator, List, Optional, Tuple, Type
 import grpc
 import sys
 import logging
@@ -10,7 +10,8 @@ import signal
 import json
 import time
 
-from pygnmi.client import gNMIclient
+from pygnmi.client import gNMIclient, gNMIException
+
 from pyroute2 import netns
 
 from ndk import sdk_service_pb2
@@ -38,6 +39,8 @@ from ndk.nexthop_group_service_pb2 import (
     NextHopGroupSubscriptionRequest,
 )
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
+
+from gnmi_info import Get_Info, Set_Info, gNMI_Info
 
 
 class BaseAgent(object):
@@ -203,22 +206,14 @@ class BaseAgent(object):
     def _get_data(
         self,
         path: List[str],
-        target_path: str = "unix:///opt/srlinux/var/run/sr_gnmi_server",
-        target_port: int = 57400,
-        username: str = "admin",
-        password: str = "admin",
-        insecure: bool = True,
-        encoding: str = "json_ietf",
-        datatype: str = "all",
+        gnmi_info: gNMI_Info = gNMI_Info(),
+        query_info: Get_Info = Get_Info(),
     ) -> dict:
         """Get state data from gNMI server.
         Args:
             path: Path to state data.
-            target_path: Path to gNMI server.
-            target_port: Port of gNMI server.
-            username: Username for gNMI server.
-            password: Password for gNMI server.
-            insecure: Whether to use insecure TLS.
+            gnmi_info: gNMI server information.
+            query_info: Query information.
         Returns:
             Response from gNMI server as dict.
             Response Format:
@@ -236,45 +231,92 @@ class BaseAgent(object):
             to get the value requested, use the following code:
             response["notification"][0]["update"][0]["val"]
         """
-        with gNMIclient(
-            target=(target_path, target_port),
-            username=username,
-            password=password,
-            insecure=insecure,
-        ) as client:
-            return client.get(path=path, encoding=encoding, datatype=datatype)
+        with gNMIclient(**vars(gnmi_info)) as client:
+            return client.get(path=path, **vars(query_info))
 
     def _set_data(
         self,
         path: List[str],
         data: str,
-        target_path: str = "unix:///opt/srlinux/var/run/sr_gnmi_server",
-        target_port: int = 57400,
-        username: str = "admin",
-        password: str = "admin",
-        insecure: bool = True,
-        encoding: str = "json_ietf",
-    ):
+        gnmi_info: gNMI_Info = gNMI_Info(),
+        query_info: Set_Info = Set_Info(),
+    ) -> dict:
         """Set data on gNMI server.
         Args:
             path: Path to state data.
-            target_path: Path to gNMI server.
-            target_port: Port of gNMI server.
-            username: Username for gNMI server.
-            password: Password for gNMI server.
-            insecure: Whether to use insecure TLS.
+            data: Data to be set.
+            gnmi_info: gNMI server information.
+            query_info: Query information.
+
+        Returns:
+            Response from gNMI server as dict.
         """
         logging.info(f"Setting data on gNMI server - {path} - {data}")
-        try:
-            with gNMIclient(
-                target=(target_path, target_port),
-                username=username,
-                password=password,
-                insecure=insecure,
-            ) as client:
-                return client.set(update=[(path, data)], encoding=encoding)
-        except Exception as e:
-            logging.error(f"Error setting data on gNMI server: {e.message} ")
+        return self._set_multiple_data(
+            data=[(path, data)],
+            gnmi_info=gnmi_info,
+            query_info=query_info,
+        )
+
+    def _set_multiple_data(
+        self,
+        data: List[Tuple[List[str], str]],
+        gnmi_info: gNMI_Info = gNMI_Info(),
+        query_info: Set_Info = Set_Info(),
+    ) -> dict:
+        """Run multiple set operations on gNMI server.
+
+        Args:
+            data: List of tuples containing path and data to be set.
+            gnmi_info: gNMI server information.
+            query_info: Query information.
+
+        Returns:
+            Response from gNMI server as dict.
+        """
+        logging.info(f"Setting data on gNMI server - {data}")
+        responses = {}
+        with gNMIclient(**vars(gnmi_info)) as client:
+            for datapoint in data:
+                try:
+                    logging.info(
+                        f"Setting data on gNMI server - {datapoint} - {type(datapoint)}"
+                    )
+                    response = client.set(update=[datapoint], **vars(query_info))
+                    responses[datapoint[0]] = response
+                except gNMIException as e:
+                    logging.error(f"Error setting data on gNMI server, continuing: {e}")
+                    responses[datapoint[0]] = None
+        return responses
+
+    def _set_with_retry(
+        self,
+        path: List[str],
+        data: str,
+        retries: int = 10,
+        retry_delay: int = 1,
+        gnmi_info: gNMI_Info = gNMI_Info(),
+        query_info: Set_Info = Set_Info(),
+    ) -> dict:
+        with gNMIclient(
+            **vars(gnmi_info),
+        ) as client:
+            while retries > 0:
+                logging.info(f"try {retries}")
+                try:
+                    response = client.set(update=[(path, data)], **vars(query_info))
+                    logging.info(
+                        f"Succesfully set data on gNMI server - {path} - {data}"
+                    )
+                    return response
+                except gNMIException as e:
+                    logging.error(
+                        "Error setting data on gNMI server: "
+                        f"retrying in {retry_delay} seconds "
+                        f"- message: {e}"
+                    )
+                    retries -= 1
+                    time.sleep(retry_delay)
             return None
 
     def _register_for_notifications(

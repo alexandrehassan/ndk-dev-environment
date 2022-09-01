@@ -7,4 +7,5 @@ topology:
       image: support-tests
       binds:
         - "../:/mnt"
-        - "../../lab/clab-support-dev/ca:/ca" # skkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+        - "../../lab/clab-support-dev/ca:/ca"
+        - "../../support/output:/mnt/output"

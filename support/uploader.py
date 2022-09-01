@@ -114,4 +114,7 @@ def archive_and_scp(
     protocol: str = "tar",
 ) -> None:
     archive("archive", data, protocol)
-    scp_to_server(server, f"output/archive.{protocol}", destination)
+    try:
+        scp_to_server(server, f"output/archive.{protocol}", destination)
+    except Exception as e:
+        logging.error(e)

@@ -38,12 +38,21 @@ class srl:
             encoding=enc,
             datatype="config",
         )
+        print(result)
         return result["notification"][0]["update"][0]["val"]["files"]
 
-    def default_paths(self):
+    def expected_paths(self):
         paths = {
             "running:/": "running",
             "state:/": "state",
             "show:/interface": "show_interface",
         }
-        return [{"path": path, "alias": alias} for path, alias in paths.items()]
+        return paths
+
+    def default_paths_set(self, actual, expected):
+        actual = {x["path"]: x["alias"] for x in actual}
+        return set(actual) == set(expected)
+
+    def trigger_agent(self):
+        result = self.gc.set(update=[("/support", {"run": "true"})], encoding=enc)
+        print(result)

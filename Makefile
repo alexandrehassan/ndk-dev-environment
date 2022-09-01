@@ -18,6 +18,18 @@ BINARY = $$(pwd)/build/$(APPNAME)
 # abs path of a dir that hosts makefile
 ROOT_DIR:=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
+# TODO: Agent is launched before pip install is run meaning that all new dependencies
+# are not available to the agent.
+
+# TODO: Pip doesn't update dependencies if they are already installed. Need to
+# figure out how to force update.
+
+# TODO: For some reason, redeploy-all needs to be run twice to get new packages accessible
+# to the agent.
+
+# FIXME: To upgrade pip package venv step pip install -U pip needs to be run and old package deleted manually
+
+
 # when make is called with `make cleanup=1 some-target` the CLEANUP var will be set to `--cleanup`
 # this is used in clab destroy commands to remove the clab-dev lab directory 
 CLEANUP=

@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 
 from base_agent import BaseAgent
+from gnmi_info import Get_Info
 import uploader
 
 from ndk import config_service_pb2
@@ -13,11 +14,11 @@ from ndk import sdk_common_pb2 as sdk_common
 
 TIME_FORMAT = "%Y-%m-%d-%H.%M.%S"
 NET_NS = "srbase-mgmt"
-DEFAULT_PATHS = {
-    "running:/": "running",
-    "state:/": "state",
-    "show:/interface": "show_interface",
-}
+DEFAULT_PATHS = [
+    ("support/files[path=running:/]", {"alias": "running"}),
+    ("support/files[path=state:/]", {"alias": "state"}),
+    ("support/files[path=show:/interface]", {"alias": "show_interface"}),
+]
 
 
 class Support(BaseAgent):
@@ -32,9 +33,7 @@ class Support(BaseAgent):
 
     def _set_default_paths(self):
         """Set default paths"""
-
-        for path, alias in DEFAULT_PATHS.items():
-            self._set_data(f"support/files[path={path}]", {"alias": alias})
+        self._set_multiple_data(DEFAULT_PATHS)
 
     def _subscribe_to_config(self):
         """Subscribe to configuration"""
@@ -68,7 +67,6 @@ class Support(BaseAgent):
         if notification.key.js_path == self.path:
             logging.info(f"Change to base path: {self.path}")
             # TODO: Find a better way to trigger these.
-            self._set_default_paths()
             paths = self._get_paths()
             data = self._get_path_data(paths)
             self._archive_data(data)
@@ -85,7 +83,9 @@ class Support(BaseAgent):
         Need to query the config to get the paths as the agent is not updated if the
         config is updated through gNMI"""
         # TODO: why is datatype needed? Shouldn't all include config??
-        response = self._get_data(path=["/support/files"], datatype="config")
+        response = self._get_data(
+            path=["/support/files"], query_info=Get_Info(datatype="config")
+        )
         # TODO: Is there a better way to get the paths?
         data = response["notification"][0]["update"][0]["val"]["files"]
         logging.info(f"Paths: {data}")
@@ -130,16 +130,22 @@ class Support(BaseAgent):
         # TODO: Multiple archive methods should be implemented, how to
         #      configure/select the method to use?
 
-        uploader.archive_and_scp(
-            "172.20.20.1", "root" "/root/git/ndk-dev-environment/", data
-        )
+        # uploader.archive_and_scp(
+        #     "172.20.20.1", "root" "/root/git/ndk-dev-environment/", data
+        # )
+        uploader.archive("archive", data)
+
+    def _ready(self):
+        """Set default paths"""
+        response = self._set_with_retry("support", {"ready_to_run": True})
+        logging.info(f"Set ready to run: {response}")
 
     def run(self):
         try:
+            self._ready()
             if self._change_netns(NET_NS):
                 logging.info(f"Changed to network namespace: {NET_NS}")
-            # else:
-            #     return
+            self._set_default_paths()
             for obj in self._get_notifications():
                 self._handle_notification(obj)
         except SystemExit:

@@ -36,5 +36,11 @@ module support {
             description
               "run the support container";
         }
+        leaf ready_to_run {
+            type boolean;
+            default false;
+            description
+              "ready to run the support container";
+        }
     }
 }
