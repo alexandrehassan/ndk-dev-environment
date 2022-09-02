@@ -2,7 +2,7 @@
 # coding=utf-8
 
 from types import TracebackType
-from typing import Generator, List, Optional, Tuple, Type
+from typing import Generator, Iterable, List, Optional, Tuple, Type, Union
 import grpc
 import sys
 import logging
@@ -41,6 +41,8 @@ from ndk.nexthop_group_service_pb2 import (
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
 from gnmi_info import Get_Info, Set_Info, gNMI_Info
+
+SetData = Tuple[List[str], str]
 
 
 class BaseAgent(object):
@@ -203,7 +205,7 @@ class BaseAgent(object):
             for notification in response.notification:
                 yield notification
 
-    def _get_data(
+    def _gnmi_get(
         self,
         path: List[str],
         gnmi_info: gNMI_Info = gNMI_Info(),
@@ -234,88 +236,74 @@ class BaseAgent(object):
         with gNMIclient(**vars(gnmi_info)) as client:
             return client.get(path=path, **vars(query_info))
 
-    def _set_data(
+    def _gnmi_set(
         self,
-        path: List[str],
-        data: str,
+        data: Union[SetData, Iterable[SetData]],
         gnmi_info: gNMI_Info = gNMI_Info(),
         query_info: Set_Info = Set_Info(),
-    ) -> dict:
+    ):
         """Set data on gNMI server.
         Args:
-            path: Path to state data.
-            data: Data to be set.
+            data: Tuple containing path and value to set or
+                iterable of tuples containing path and value to set.
             gnmi_info: gNMI server information.
             query_info: Query information.
 
         Returns:
             Response from gNMI server as dict.
         """
-        logging.info(f"Setting data on gNMI server - {path} - {data}")
-        return self._set_multiple_data(
-            data=[(path, data)],
-            gnmi_info=gnmi_info,
-            query_info=query_info,
-        )
-
-    def _set_multiple_data(
-        self,
-        data: List[Tuple[List[str], str]],
-        gnmi_info: gNMI_Info = gNMI_Info(),
-        query_info: Set_Info = Set_Info(),
-    ) -> dict:
-        """Run multiple set operations on gNMI server.
-
-        Args:
-            data: List of tuples containing path and data to be set.
-            gnmi_info: gNMI server information.
-            query_info: Query information.
-
-        Returns:
-            Response from gNMI server as dict.
-        """
+        # TODO: This is a temporary fix to ensure that the data is an iterable.
+        if isinstance(data, Tuple):
+            data = [data]
         logging.info(f"Setting data on gNMI server - {data}")
         responses = {}
         with gNMIclient(**vars(gnmi_info)) as client:
             for datapoint in data:
+                logging.info(f"Setting data on gNMI server - {datapoint}")
                 try:
-                    logging.info(
-                        f"Setting data on gNMI server - {datapoint} - {type(datapoint)}"
-                    )
                     response = client.set(update=[datapoint], **vars(query_info))
-                    responses[datapoint[0]] = response
                 except gNMIException as e:
                     logging.error(f"Error setting data on gNMI server, continuing: {e}")
-                    responses[datapoint[0]] = None
-        return responses
+                    response = None
+                responses[datapoint[0]] = response
+        return response
 
-    def _set_with_retry(
+    def _gnmi_set_retry(
         self,
-        path: List[str],
-        data: str,
-        retries: int = 10,
+        data: SetData,
+        max_retries: int = 10,
         retry_delay: int = 1,
         gnmi_info: gNMI_Info = gNMI_Info(),
         query_info: Set_Info = Set_Info(),
     ) -> dict:
+        """Set data on gNMI server retrying if necessary.
+        Args:
+            data: Tuple containing path and value to set.
+            max_retries: Maximum number of retries.
+            retry_delay: Delay between retries. (seconds)
+            gnmi_info: gNMI server information.
+            query_info: Query information.
+
+        Returns:
+            Response from gNMI server as dict, or None if unsuccessful.
+        """
         with gNMIclient(
             **vars(gnmi_info),
         ) as client:
-            while retries > 0:
-                logging.info(f"try {retries}")
+            while max_retries > 0:
+                logging.info(f"try {max_retries}")
                 try:
-                    response = client.set(update=[(path, data)], **vars(query_info))
+                    response = client.set(update=[data], **vars(query_info))
                     logging.info(
-                        f"Succesfully set data on gNMI server - {path} - {data}"
+                        f"Succesfully set data on gNMI server - {data[0]} - {data[1]}"
                     )
                     return response
                 except gNMIException as e:
                     logging.error(
                         "Error setting data on gNMI server: "
-                        f"retrying in {retry_delay} seconds "
-                        f"- message: {e}"
+                        f"retrying in {retry_delay} seconds - {e}"
                     )
-                    retries -= 1
+                    max_retries -= 1
                     time.sleep(retry_delay)
             return None
 

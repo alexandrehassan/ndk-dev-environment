@@ -33,7 +33,7 @@ class Support(BaseAgent):
 
     def _set_default_paths(self):
         """Set default paths"""
-        self._set_multiple_data(DEFAULT_PATHS)
+        self._gnmi_set(DEFAULT_PATHS)
 
     def _subscribe_to_config(self):
         """Subscribe to configuration"""
@@ -84,7 +84,7 @@ class Support(BaseAgent):
         Need to query the config to get the paths as the agent is not updated if the
         config is updated through gNMI"""
         # TODO: why is datatype needed? Shouldn't all include config??
-        response = self._get_data(
+        response = self._gnmi_get(
             path=["/support/files"], query_info=Get_Info(datatype="config")
         )
         # TODO: Is there a better way to get the paths?
@@ -107,7 +107,7 @@ class Support(BaseAgent):
             """Query the path and return the data"""
             logging.info(f"Querying path: {path}")
             try:
-                data = self._get_data([path])["notification"][0]["update"][0]["val"]
+                data = self._gnmi_get([path])["notification"][0]["update"][0]["val"]
             except grpc.RpcError as e:
                 logging.error(f"Failed to query path: {path}")
                 logging.debug(f"Failed to query path: {path} :: {e}")
@@ -138,12 +138,12 @@ class Support(BaseAgent):
 
     def _signal_end_of_run(self):
         """Signal end of run"""
-        response = self._set_data("support", {"run": False})
+        response = self._gnmi_set(("support", {"run": False}))
         logging.info(f"Set run to false: {response}")
 
     def _ready(self):
         """Set default paths"""
-        response = self._set_with_retry("support", {"ready_to_run": True})
+        response = self._gnmi_set_retry(("support", {"ready_to_run": True}))
         logging.info(f"Set ready to run: {response}")
 
     def run(self):
