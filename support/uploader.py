@@ -1,14 +1,15 @@
 import logging
 import shutil
 import os
+from typing import Dict
 import requests
 import paramiko
 from paramiko import SSHClient
 from scp import SCPClient
 
-from support_agent import Snapshot
 import json
 
+Snapshot = Dict[str, Dict[str, str]]
 GITHUB_GIST = "https://api.github.com/gists"
 
 
