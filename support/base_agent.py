@@ -14,9 +14,17 @@ from pygnmi.client import gNMIclient, gNMIException
 
 from pyroute2 import netns
 
-from ndk import sdk_service_pb2
-from ndk import sdk_service_pb2_grpc
-from ndk import telemetry_service_pb2_grpc
+from ndk.sdk_service_pb2 import (
+    AgentRegistrationRequest,
+    NotificationRegisterRequest,
+    Notification,
+    NotificationStreamRequest,
+)
+from ndk.sdk_service_pb2_grpc import (
+    SdkMgrServiceStub,
+    SdkNotificationServiceStub,
+)
+from ndk.telemetry_service_pb2_grpc import SdkMgrTelemetryServiceStub
 from ndk import telemetry_service_pb2
 from ndk.interface_service_pb2 import (
     InterfaceNotification,
@@ -46,7 +54,7 @@ SetData = Tuple[List[str], str]
 
 
 class BaseAgent(object):
-    def __init__(self, name):
+    def __init__(self, name: str):
         self.name = name
         self.metadata = [("agent_name", self.name)]
         self.stream_id = None
@@ -73,24 +81,18 @@ class BaseAgent(object):
 
         # Create  base service that defines agent registration, unregistration,
         # notification subscriptions, and keepalive messages.
-        self.sdk_mgr_client = sdk_service_pb2_grpc.SdkMgrServiceStub(self.channel)
+        self.sdk_mgr_client = SdkMgrServiceStub(self.channel)
         # Create service for handling notifications.
-        self.sdk_notification_client = sdk_service_pb2_grpc.SdkNotificationServiceStub(
-            self.channel
-        )
+        self.sdk_notification_client = SdkNotificationServiceStub(self.channel)
 
         # Create the telemetry service to store state data.
-        self.sdk_telemetry_client = (
-            telemetry_service_pb2_grpc.SdkMgrTelemetryServiceStub(self.channel)
-        )
+        self.sdk_telemetry_client = SdkMgrTelemetryServiceStub(self.channel)
 
         # Register agent
         self.sdk_mgr_client.AgentRegister(
-            request=sdk_service_pb2.AgentRegistrationRequest(), metadata=self.metadata
+            request=AgentRegistrationRequest(), metadata=self.metadata
         )
-        request = sdk_service_pb2.NotificationRegisterRequest(
-            op=sdk_service_pb2.NotificationRegisterRequest.Create
-        )
+        request = NotificationRegisterRequest(op=NotificationRegisterRequest.Create)
         create_subscription_response = self.sdk_mgr_client.NotificationRegister(
             request=request, metadata=self.metadata
         )
@@ -123,7 +125,7 @@ class BaseAgent(object):
 
         try:
             self.sdk_mgr_client.AgentUnRegister(
-                request=sdk_service_pb2.AgentRegistrationRequest(),
+                request=AgentRegistrationRequest(),
                 metadata=self.metadata,
             )
         except grpc._channel._Rendezvous as err:
@@ -134,9 +136,9 @@ class BaseAgent(object):
         """Agent recieved SIGTERM signal.
         Clean up and exit.
         """
-        logging.info("Revied SIGTERM, exiting")
+        logging.info("Received SIGTERM, exiting")
         # Unregister agent
-        unregister_request = sdk_service_pb2.AgentRegistrationRequest()
+        unregister_request = AgentRegistrationRequest()
         unregister_response = self.sdk_mgr_client.AgentUnRegister(
             request=unregister_request, metadata=self.metadata
         )
@@ -188,15 +190,13 @@ class BaseAgent(object):
         else:
             logging.warning(f"Telemetry update failed error: {response.error_str}")
 
-    def _get_notifications(self) -> Generator[sdk_service_pb2.Notification, None, None]:
+    def _get_notifications(self) -> Generator[Notification, None, None]:
         """Checks for notifications.
 
         Yields:
             Notification: Notification received from the SDK Manager.
         """
-        stream_request = sdk_service_pb2.NotificationStreamRequest(
-            stream_id=self.stream_id
-        )
+        stream_request = NotificationStreamRequest(stream_id=self.stream_id)
         stream_response = self.sdk_notification_client.NotificationStream(
             request=stream_request, metadata=self.metadata
         )
@@ -268,7 +268,6 @@ class BaseAgent(object):
         # TODO: This is a temporary fix to ensure that the data is an iterable.
         if isinstance(data, tuple):
             data = [data]
-        logging.info(f"Setting data on gNMI server - {data}")
         responses = {}
         with gNMIclient(**vars(gnmi_info)) as client:
             for datapoint in data:
@@ -284,7 +283,7 @@ class BaseAgent(object):
     def _gnmi_set_retry(
         self,
         data: SetData,
-        max_retries: int = 10,
+        max_retries: int = 30,
         retry_delay: int = 1,
         gnmi_info: gNMI_Info = gNMI_Info(),
         query_info: Set_Info = Set_Info(),
@@ -300,22 +299,15 @@ class BaseAgent(object):
         Returns:
             Response from gNMI server as dict, or None if unsuccessful.
         """
-        with gNMIclient(
-            **vars(gnmi_info),
-        ) as client:
+        with gNMIclient(**vars(gnmi_info)) as client:
             while max_retries > 0:
-                logging.info(f"try {max_retries}")
                 try:
                     response = client.set(update=[data], **vars(query_info))
                     logging.info(
                         f"Succesfully set data on gNMI server - {data[0]} - {data[1]}"
                     )
                     return response
-                except gNMIException as e:
-                    logging.error(
-                        "Error setting data on gNMI server: "
-                        f"retrying in {retry_delay} seconds - {e}"
-                    )
+                except gNMIException:
                     max_retries -= 1
                     time.sleep(retry_delay)
             raise gNMIException("Error setting data on gNMI server")
@@ -347,9 +339,9 @@ class BaseAgent(object):
             True if subscription is successful, False otherwise.
         """
 
-        request = sdk_service_pb2.NotificationRegisterRequest(
+        request = NotificationRegisterRequest(
             stream_id=self.stream_id,
-            op=sdk_service_pb2.NotificationRegisterRequest.AddSubscription,
+            op=NotificationRegisterRequest.AddSubscription,
             intf=intf_request,
             nw_inst=nw_request,
             lldp_neighbor=lldp_neighbor_request,
@@ -371,7 +363,7 @@ class BaseAgent(object):
             logging.error(f"Failed to subscribe :: {msg_str}")
         return response.status == sdk_status.kSdkMgrSuccess
 
-    def _handle_notification(self, notification: sdk_service_pb2.Notification):
+    def _handle_notification(self, notification: Notification):
         """
         Handles notifications.
         """

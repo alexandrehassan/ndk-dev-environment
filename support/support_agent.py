@@ -8,8 +8,8 @@ from base_agent import BaseAgent
 from gnmi_info import Get_Info
 import uploader
 
-from ndk import config_service_pb2
-from ndk import sdk_common_pb2 as sdk_common
+from ndk.config_service_pb2 import ConfigSubscriptionRequest, ConfigNotification
+from ndk.sdk_common_pb2 import SdkMgrOperation as OpCode
 
 Snapshot = Dict[str, Dict[str, str]]
 
@@ -32,32 +32,20 @@ class Support(BaseAgent):
         self._subscribe_to_config()
         return self
 
-    def _set_default_paths(self):
-        """Set default paths"""
-        self._gnmi_set(DEFAULT_PATHS)
-
     def _subscribe_to_config(self):
         """Subscribe to configuration"""
-        self._register_for_notifications(
-            config_request=config_service_pb2.ConfigSubscriptionRequest()
-        )
+        self._register_for_notifications(config_request=ConfigSubscriptionRequest())
 
-    def _handle_ConfigNotification(
-        self, notification: config_service_pb2.ConfigNotification
-    ) -> None:
+    def _handle_ConfigNotification(self, notification: ConfigNotification) -> None:
         """Handle configuration notification
 
         Args:
             config_notif: Configuration notification
         """
-        if notification.key.js_path.startswith(self.path):
-            if _is_create_notif(notification):
-                pass
-            elif _is_delete_notif(notification):
-                pass
-            elif _is_change_notif(notification):
-                self._handle_config_change(notification)
-        elif notification.key.js_path == ".commit.end":
+        js_path = notification.key.js_path
+        if js_path.startswith(self.path) and notification.op == OpCode.Change:
+            self._handle_config_change(notification)
+        elif js_path == ".commit.end":
             logging.info("Received commit end notification")
         else:
             logging.info(f"Unhandled config notification: {notification}")
@@ -104,26 +92,20 @@ class Support(BaseAgent):
                 {"path_alias": {"contents": "data from path"}}
         """
         res = {
-            path: data["notification"][0]["update"][0]["val"]
+            path: json.dumps(data["notification"][0]["update"][0]["val"])
             for path, data in self._gnmi_get(paths.values()).items()
         }
-        responses = {alias: res[path] for alias, path in paths.items()}
 
         time = datetime.now().strftime(TIME_FORMAT)
-        data = {
-            f"{time}-{name}.json": {"content": json.dumps(response)}
-            for name, response in responses.items()
+        return {
+            f"{time}-{alias}.json": {"content": res[path]}
+            for alias, path in paths.items()
         }
-        return data
 
     def _archive_data(self, data: Snapshot) -> None:
         """Archive data"""
         # TODO: Multiple archive methods should be implemented, how to
         #      configure/select the method to use?
-
-        # uploader.archive_and_scp(
-        #     "172.20.20.1", "root" "/root/git/ndk-dev-environment/", data
-        # )
         uploader.archive("archive", data)
 
     def _signal_end_of_run(self):
@@ -131,17 +113,15 @@ class Support(BaseAgent):
         response = self._gnmi_set(("support", {"run": False}))
         logging.info(f"Set run to false: {response}")
 
-    def _ready(self):
-        """Set default paths"""
-        response = self._gnmi_set_retry(("support", {"ready_to_run": True}))
-        logging.info(f"Set ready to run: {response}")
-
     def run(self):
         try:
-            self._ready()
+            # Signal that the agent is ready to run
+            # (also checks that yang model is loaded)
+            self._gnmi_set_retry(("support", {"ready_to_run": True}))
             if self._change_netns(NET_NS):
                 logging.info(f"Changed to network namespace: {NET_NS}")
-            self._set_default_paths()
+            # Set the default paths
+            self._gnmi_set(DEFAULT_PATHS)
             for obj in self._get_notifications():
                 self._handle_notification(obj)
         except SystemExit:
@@ -152,15 +132,3 @@ class Support(BaseAgent):
             raise e
         finally:
             logging.info("End of notification stream reading")
-
-
-def _is_change_notif(notification):
-    return notification.op == sdk_common.SdkMgrOperation.Change
-
-
-def _is_create_notif(notification):
-    return notification.op == sdk_common.SdkMgrOperation.Create
-
-
-def _is_delete_notif(notification):
-    return notification.op == sdk_common.SdkMgrOperation.Delete
