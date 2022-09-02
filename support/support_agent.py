@@ -4,7 +4,7 @@ import grpc
 import json
 from datetime import datetime
 
-from base_agent import BaseAgent
+from base_agent import BaseAgent, gnmi_get, gnmi_set, gnmi_set_retry
 from gnmi_info import Get_Info
 import uploader
 
@@ -62,8 +62,8 @@ class Support(BaseAgent):
             if json_data["run"]["value"]:
                 logging.info("Received run notification")
                 paths = self._get_paths()
-                data = self._get_path_data(paths)
-                self._archive_data(data)
+                snapshot = self._get_path_snapshot(paths)
+                self._archive_snapshot(snapshot)
                 self._signal_end_of_run()
         elif notification.key.js_path == f"{self.path}.files":
             logging.info(f"Change to files path: {self.path}.files")
@@ -75,15 +75,13 @@ class Support(BaseAgent):
         Need to query the config to get the paths as the agent is not updated if the
         config is updated through gNMI"""
         # TODO: why is datatype needed? Shouldn't all include config??
-        response = self._gnmi_get(
-            "/support/files", query_info=Get_Info(datatype="config")
-        )
-        # TODO: Is there a better way to get the paths?
-        data = response["notification"][0]["update"][0]["val"]["files"]
-        logging.info(f"Paths: {data}")
-        return {entry["alias"]: entry["path"] for entry in data}
+        response = _get_val(
+            gnmi_get("/support/files", query_info=Get_Info(datatype="config"))
+        )["files"]
+        logging.info(f"Paths: {response}")
+        return {entry["alias"]: entry["path"] for entry in response}
 
-    def _get_path_data(self, paths: Dict[str, str]) -> Snapshot:
+    def _get_path_snapshot(self, paths: Dict[str, str]) -> Snapshot:
         """Query the paths and return the data
 
         Args:
@@ -94,8 +92,8 @@ class Support(BaseAgent):
                 {"path_alias": {"contents": "data from path"}}
         """
         res = {
-            path: json.dumps(data["notification"][0]["update"][0]["val"])
-            for path, data in self._gnmi_get(paths.values()).items()
+            path: json.dumps(_get_val(data))
+            for path, data in gnmi_get(paths.values()).items()
         }
 
         time = datetime.now().strftime(TIME_FORMAT)
@@ -104,26 +102,26 @@ class Support(BaseAgent):
             for alias, path in paths.items()
         }
 
-    def _archive_data(self, data: Snapshot) -> None:
+    def _archive_snapshot(self, snapshot: Snapshot) -> None:
         """Archive data"""
         # TODO: Multiple archive methods should be implemented, how to
         #      configure/select the method to use?
-        uploader.archive("archive", data)
+        uploader.archive("archive", snapshot)
 
     def _signal_end_of_run(self):
         """Signal end of run"""
-        response = self._gnmi_set(("support", {"run": False}))
+        response = gnmi_set(("support", {"run": False}))
         logging.info(f"Set run to false: {response}")
 
     def run(self):
         try:
             # Signal that the agent is ready to run
             # (also checks that yang model is loaded)
-            self._gnmi_set_retry(("support", {"ready_to_run": True}))
+            gnmi_set_retry(("support", {"ready_to_run": True}))
             if self._change_netns(NET_NS):
                 logging.info(f"Changed to network namespace: {NET_NS}")
             # Set the default paths
-            self._gnmi_set(DEFAULT_PATHS)
+            gnmi_set(DEFAULT_PATHS)
             for obj in self._get_notifications():
                 self._handle_notification(obj)
         except SystemExit:
@@ -134,3 +132,7 @@ class Support(BaseAgent):
             raise e
         finally:
             logging.info("End of notification stream reading")
+
+
+def _get_val(message: dict):
+    return message["notification"][0]["update"][0]["val"]

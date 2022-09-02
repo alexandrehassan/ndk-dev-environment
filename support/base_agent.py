@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 
+import threading
 from types import TracebackType
 from typing import Generator, Iterable, List, Optional, Tuple, Type, Union
 import grpc
@@ -19,6 +20,7 @@ from ndk.sdk_service_pb2 import (
     NotificationRegisterRequest,
     Notification,
     NotificationStreamRequest,
+    KeepAliveRequest,
 )
 from ndk.sdk_service_pb2_grpc import (
     SdkMgrServiceStub,
@@ -58,6 +60,7 @@ class BaseAgent(object):
         self.name = name
         self.metadata = [("agent_name", self.name)]
         self.stream_id = None
+        self.keepalive_interval = 10
 
         signal.signal(signal.SIGTERM, self._handle_sigterm)
         signal.signal(signal.SIGHUP, self._handle_sighup)
@@ -89,9 +92,17 @@ class BaseAgent(object):
         self.sdk_telemetry_client = SdkMgrTelemetryServiceStub(self.channel)
 
         # Register agent
-        self.sdk_mgr_client.AgentRegister(
-            request=AgentRegistrationRequest(), metadata=self.metadata
+        register_request = AgentRegistrationRequest()
+        register_request.agent_liveliness = self.keepalive_interval
+        response = self.sdk_mgr_client.AgentRegister(
+            request=register_request, metadata=self.metadata
         )
+        if response.status == sdk_status.kSdkMgrSuccess:
+            logging.info("Agent registered successfully")
+        else:
+            logging.error(f"Agent registration failed with error {response.error_str}")
+
+        self._start_keepalive()
         request = NotificationRegisterRequest(op=NotificationRegisterRequest.Create)
         create_subscription_response = self.sdk_mgr_client.NotificationRegister(
             request=request, metadata=self.metadata
@@ -162,6 +173,28 @@ class BaseAgent(object):
         logging.info("Handle SIGQUIT")
         logging.info("Stop and dump not implemented")
 
+    def _start_keepalive(self):
+        """Start keepalive thread."""
+        self._keepalive_signal = threading.Event()
+        keepalive_thread = threading.Thread(
+            target=self.__keepalive, args=(self._keepalive_signal,)
+        )
+        keepalive_thread.daemon = True
+        keepalive_thread.start()
+
+    def _stop_keepalive(self):
+        """Stop keepalive thread."""
+        self._keepalive_signal.set()
+
+    def __keepalive(self, stop_signal: threading.Event):
+        """Start keepalive thread."""
+        while not stop_signal.is_set():
+            request = KeepAliveRequest()
+            res = self.sdk_mgr_client.KeepAlive(request, metadata=self.metadata)
+            if res.status == sdk_status.kSdkMgrFailed:
+                logging.warning("KeepAlive failed")
+            time.sleep(self.keepalive_interval)
+
     def run(self):
         logging.warning("Run() function not implemented")
 
@@ -204,113 +237,6 @@ class BaseAgent(object):
         for response in stream_response:
             for notification in response.notification:
                 yield notification
-
-    def _gnmi_get(
-        self,
-        paths: Union[str, List[str]],
-        gnmi_info: gNMI_Info = gNMI_Info(),
-        query_info: Get_Info = Get_Info(),
-    ) -> dict:
-        """Get state data from gNMI server.
-        Args:
-            paths: Path(s) to state data to be retrieved (string or list of strings).
-            gnmi_info: gNMI server information.
-            query_info: Query information.
-        Returns:
-            If a single path is provided, returns the response, otherwise
-            return a dictionary of paths and response data Formatted as:
-                {"path": response}
-
-            response from gNMI server as dict.
-            response Format:
-                {
-                    "notification": [
-                        {
-                            "timestamp": 1660737964042766695,
-                            "prefix": None,
-                            "alias": None,
-                            "atomic": False,
-                            "update": [{"path": "metric:metric/flag", "val": True}],
-                        }
-                    ]
-                }
-            to get the value requested, use the following code:
-            response["notification"][0]["update"][0]["val"]
-        """
-        if isinstance(paths, str):
-            paths = [paths]
-        with gNMIclient(**vars(gnmi_info)) as client:
-            responses = {}
-            try:
-                for path in paths:
-                    responses[path] = client.get(path=[path], **vars(query_info))
-            except gNMIException as err:
-                logging.error(f"Error for path {path}: err - {err}")
-                raise err
-        return responses if len(responses) > 1 else responses[paths[0]]
-
-    def _gnmi_set(
-        self,
-        data: Union[SetData, Iterable[SetData]],
-        gnmi_info: gNMI_Info = gNMI_Info(),
-        query_info: Set_Info = Set_Info(),
-    ):
-        """Set data on gNMI server.
-        Args:
-            data: Tuple containing path and value to set or
-                iterable of tuples containing path and value to set.
-            gnmi_info: gNMI server information.
-            query_info: Query information.
-
-        Returns:
-            Response from gNMI server as dict.
-        """
-        # Naive check to see if data is a single tuple or iterable of tuples.
-        if isinstance(data, tuple) and isinstance(data[0], str):
-            data = (data,)
-        responses = {}
-        with gNMIclient(**vars(gnmi_info)) as client:
-            for datapoint in data:
-                logging.info(f"Setting data on gNMI server - {datapoint}")
-                try:
-                    response = client.set(update=[datapoint], **vars(query_info))
-                except gNMIException as e:
-                    logging.error(f"Error setting data on gNMI server, continuing: {e}")
-                    response = None
-                responses[datapoint[0]] = response
-        return response
-
-    def _gnmi_set_retry(
-        self,
-        data: SetData,
-        max_retries: int = 30,
-        retry_delay: int = 1,
-        gnmi_info: gNMI_Info = gNMI_Info(),
-        query_info: Set_Info = Set_Info(),
-    ) -> dict:
-        """Set data on gNMI server retrying if necessary.
-        Args:
-            data: Tuple containing path and value to set.
-            max_retries: Maximum number of retries.
-            retry_delay: Delay between retries. (seconds)
-            gnmi_info: gNMI server information.
-            query_info: Query information.
-
-        Returns:
-            Response from gNMI server as dict, or None if unsuccessful.
-        """
-        with gNMIclient(**vars(gnmi_info)) as client:
-            while max_retries > 0:
-                try:
-                    response = client.set(update=[data], **vars(query_info))
-                    logging.info(
-                        f"Succesfully set data on gNMI server - {data[0]} - {data[1]}"
-                    )
-                    return response
-                except gNMIException:
-                    max_retries -= 1
-                    time.sleep(retry_delay)
-            raise gNMIException("Error setting data on gNMI server")
 
     def _register_for_notifications(
         self,
@@ -465,7 +391,7 @@ class BaseAgent(object):
         logging.info(f"Received NextHopGroupNotification: {notification}")
 
     def _change_netns(
-        self, netns_name: str, timeout: int = 10, interval: int = 1
+        self, netns_name: str, *, timeout: int = 10, interval: int = 1
     ) -> bool:
         """
         Changes network namespace to the specified name.
@@ -491,3 +417,113 @@ class BaseAgent(object):
                 if timeout <= 0:
                     logging.error(f"Failed to change network namespace to {netns_name}")
                     return False
+
+
+def gnmi_get(
+    paths: Union[str, List[str]],
+    *,
+    gnmi_info: gNMI_Info = gNMI_Info(),
+    query_info: Get_Info = Get_Info(),
+) -> dict:
+    """Get state data from gNMI server.
+    Args:
+        paths: Path(s) to state data to be retrieved (string or list of strings).
+        gnmi_info: gNMI server information.
+        query_info: Query information.
+    Returns:
+        If a single path is provided, returns the response, otherwise
+        return a dictionary of paths and response data Formatted as:
+            {"path": response}
+
+        response from gNMI server as dict.
+        response Format:
+            {
+                "notification": [
+                    {
+                        "timestamp": 1660737964042766695,
+                        "prefix": None,
+                        "alias": None,
+                        "atomic": False,
+                        "update": [{"path": "metric:metric/flag", "val": True}],
+                    }
+                ]
+            }
+        to get the value requested, use the following code:
+        response["notification"][0]["update"][0]["val"]
+    """
+    if isinstance(paths, str):
+        paths = [paths]
+    with gNMIclient(**vars(gnmi_info)) as client:
+        responses = {}
+        try:
+            for path in paths:
+                responses[path] = client.get(path=[path], **vars(query_info))
+        except gNMIException as err:
+            logging.error(f"Error for path {path}: err - {err}")
+            raise err
+    return responses if len(responses) > 1 else responses[paths[0]]
+
+
+def gnmi_set(
+    data: Union[SetData, Iterable[SetData]],
+    *,
+    gnmi_info: gNMI_Info = gNMI_Info(),
+    query_info: Set_Info = Set_Info(),
+):
+    """Set data on gNMI server.
+    Args:
+        data: Tuple containing path and value to set or
+            iterable of tuples containing path and value to set.
+        gnmi_info: gNMI server information.
+        query_info: Query information.
+
+    Returns:
+        Response from gNMI server as dict.
+    """
+    # Naive check to see if data is a single tuple or iterable of tuples.
+    if isinstance(data, tuple) and isinstance(data[0], str):
+        data = (data,)
+    responses = {}
+    with gNMIclient(**vars(gnmi_info)) as client:
+        for datapoint in data:
+            logging.info(f"Setting data on gNMI server - {datapoint}")
+            try:
+                response = client.set(update=[datapoint], **vars(query_info))
+            except gNMIException as e:
+                logging.error(f"Error setting data on gNMI server, continuing: {e}")
+                response = None
+            responses[datapoint[0]] = response
+    return response
+
+
+def gnmi_set_retry(
+    data: SetData,
+    *,
+    max_retries: int = 30,
+    retry_delay: int = 1,
+    gnmi_info: gNMI_Info = gNMI_Info(),
+    query_info: Set_Info = Set_Info(),
+) -> dict:
+    """Set data on gNMI server retrying if necessary.
+    Args:
+        data: Tuple containing path and value to set.
+        max_retries: Maximum number of retries.
+        retry_delay: Delay between retries. (seconds)
+        gnmi_info: gNMI server information.
+        query_info: Query information.
+
+    Returns:
+        Response from gNMI server as dict, or None if unsuccessful.
+    """
+    with gNMIclient(**vars(gnmi_info)) as client:
+        while max_retries > 0:
+            try:
+                response = client.set(update=[data], **vars(query_info))
+                logging.info(
+                    f"Succesfully set data on gNMI server - {data[0]} - {data[1]}"
+                )
+                return response
+            except gNMIException:
+                max_retries -= 1
+                time.sleep(retry_delay)
+        raise gNMIException("Error setting data on gNMI server")
