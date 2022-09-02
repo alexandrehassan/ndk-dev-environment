@@ -55,7 +55,6 @@ class Support(BaseAgent):
             elif _is_delete_notif(notification):
                 pass
             elif _is_change_notif(notification):
-                logging.info(f"Change notification to path: {notification.key.js_path}")
                 self._handle_config_change(notification)
         elif notification.key.js_path == ".commit.end":
             logging.info("Received commit end notification")
@@ -65,18 +64,20 @@ class Support(BaseAgent):
     def _handle_config_change(self, notification):
         """Handle change notification"""
         if notification.key.js_path == self.path:
-            logging.info(f"Change to base path: {self.path}")
-            # TODO: Find a better way to trigger these.
-            paths = self._get_paths()
-            data = self._get_path_data(paths)
-            self._archive_data(data)
-            # Archive().upload_all(self.output_path)
+            json_data = json.loads(notification.data.json)
+            if not json_data["ready_to_run"]["value"]:
+                logging.info("Not ready to run")
+                return
+            if json_data["run"]["value"]:
+                logging.info("Received run notification")
+                paths = self._get_paths()
+                data = self._get_path_data(paths)
+                self._archive_data(data)
+                self._signal_end_of_run()
         elif notification.key.js_path == f"{self.path}.files":
             logging.info(f"Change to files path: {self.path}.files")
         else:
             logging.info(f"Unhandled change notification: {notification}")
-            return
-        logging.info(f"Change notification: {notification}")
 
     def _get_paths(self) -> Dict[str, str]:
         """Get paths from config
@@ -101,7 +102,7 @@ class Support(BaseAgent):
             Data from the paths in a dictionary in the format:
                 {"path_alias": "data from path"}
         """
-
+        # TODO: Use a single gNMI request to get all the data
         def _query(path: str) -> Dict[str, Any]:
             """Query the path and return the data"""
             logging.info(f"Querying path: {path}")
@@ -134,6 +135,11 @@ class Support(BaseAgent):
         #     "172.20.20.1", "root" "/root/git/ndk-dev-environment/", data
         # )
         uploader.archive("archive", data)
+
+    def _signal_end_of_run(self):
+        """Signal end of run"""
+        response = self._set_data("support", {"run": False})
+        logging.info(f"Set run to false: {response}")
 
     def _ready(self):
         """Set default paths"""
