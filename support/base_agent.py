@@ -207,13 +207,13 @@ class BaseAgent(object):
 
     def _gnmi_get(
         self,
-        path: List[str],
+        path: Union[str, List[str]],
         gnmi_info: gNMI_Info = gNMI_Info(),
         query_info: Get_Info = Get_Info(),
     ) -> dict:
         """Get state data from gNMI server.
         Args:
-            path: Path to state data.
+            path: Path(s) to state data to be retrieved (string or list of strings).
             gnmi_info: gNMI server information.
             query_info: Query information.
         Returns:
@@ -233,6 +233,8 @@ class BaseAgent(object):
             to get the value requested, use the following code:
             response["notification"][0]["update"][0]["val"]
         """
+        if isinstance(path, str):
+            path = [path]
         with gNMIclient(**vars(gnmi_info)) as client:
             return client.get(path=path, **vars(query_info))
 

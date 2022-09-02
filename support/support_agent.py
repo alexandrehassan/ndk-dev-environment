@@ -85,7 +85,7 @@ class Support(BaseAgent):
         config is updated through gNMI"""
         # TODO: why is datatype needed? Shouldn't all include config??
         response = self._gnmi_get(
-            path=["/support/files"], query_info=Get_Info(datatype="config")
+            path="/support/files", query_info=Get_Info(datatype="config")
         )
         # TODO: Is there a better way to get the paths?
         data = response["notification"][0]["update"][0]["val"]["files"]
@@ -107,7 +107,7 @@ class Support(BaseAgent):
             """Query the path and return the data"""
             logging.info(f"Querying path: {path}")
             try:
-                data = self._gnmi_get([path])["notification"][0]["update"][0]["val"]
+                data = self._gnmi_get(path)["notification"][0]["update"][0]["val"]
             except grpc.RpcError as e:
                 logging.error(f"Failed to query path: {path}")
                 logging.debug(f"Failed to query path: {path} :: {e}")
