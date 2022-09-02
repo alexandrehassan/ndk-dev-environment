@@ -6,6 +6,8 @@ enc = "json_ietf"
 
 
 class srl:
+    ROBOT_LIBRARY_SCOPE = "TEST CASE"
+
     def __init__(self):
         self.gc = gNMIclient(
             target=host,
@@ -40,6 +42,17 @@ class srl:
         )
         print(result)
         return result["notification"][0]["update"][0]["val"]["files"]
+
+    def agent_is_ready_to_run(self):
+        result = self.gc.get(path=["support"], encoding=enc, datatype="config")
+        return result["notification"][0]["update"][0]["val"]["ready_to_run"]
+
+    def agent_run_value(self):
+        result = self.gc.get(path=["support"], encoding=enc, datatype="config")
+        try:
+            return result["notification"][0]["update"][0]["val"]["run"]
+        except KeyError:
+            return False
 
     def expected_paths(self):
         paths = {

@@ -30,22 +30,25 @@ Agent Should Not Run
     ${result}=    get_agent_status
     Should Not Be Equal    ${result}    running
 
+Agent Run False
+    ${result}=    agent_run_value
+    Should Not Be True    ${result}
 *** Test Cases ***
-# Test agent running
-#     Wait Until Keyword Succeeds    30x    1s
-#     ...    Agent Should Run
+Test agent running
+    Wait Until Keyword Succeeds    30x    1s
+    ...    Agent Should Run
 
-# Test agent stop
-#     stop_agent
-#     Wait Until Keyword Succeeds    30x    10s
-#     ...    Agent Should Not Run
-#     Sleep    5
+Test agent stop
+    stop_agent
+    Wait Until Keyword Succeeds    30x    10s
+    ...    Agent Should Not Run
+    Sleep    5
 
-# Test agent start
-#     start_agent
-#     Wait Until Keyword Succeeds    30x    1s
-#     ...    Agent Should Run
-#     Sleep    5
+Test agent start
+    start_agent
+    Wait Until Keyword Succeeds    30x    1s
+    ...    Agent Should Run
+    Sleep    5
     
 Test agent defaults
    Wait Until Keyword Succeeds    30x    1s
@@ -54,10 +57,20 @@ Test agent defaults
    ...    Agent Defaults
 
 Test agent archive
+    # Clear the output directory
+    Empty Directory    output/        
+    # Wait for the agent to be ready to run
     Wait Until Keyword Succeeds    30x    1s
-    ...    Agent Should Run
-    OperatingSystem.File Should not exist    output/archive.tar
+    ...    agent_is_ready_to_run
+    # The agent Run value is a command trigger and should be false
+    Agent Run False
+    # Set the agent Run value to true, to signal the agent to archive
     trigger_agent
-    Sleep   5
+    # Wait for the agent to archive
+    Sleep   1s
+    # An archive should have been created
     OperatingSystem.File Should exist    output/archive.tar
-    
+    # The agent should be ready to run again
+    Agent Run False
+    # Clear the output directory
+    Empty Directory    output/
