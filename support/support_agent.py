@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict
+from typing import Dict
 import grpc
 import json
 from datetime import datetime
@@ -11,6 +11,7 @@ import uploader
 from ndk import config_service_pb2
 from ndk import sdk_common_pb2 as sdk_common
 
+Snapshot = Dict[str, Dict[str, str]]
 
 TIME_FORMAT = "%Y-%m-%d-%H.%M.%S"
 NET_NS = "srbase-mgmt"
@@ -85,14 +86,14 @@ class Support(BaseAgent):
         config is updated through gNMI"""
         # TODO: why is datatype needed? Shouldn't all include config??
         response = self._gnmi_get(
-            path="/support/files", query_info=Get_Info(datatype="config")
+            "/support/files", query_info=Get_Info(datatype="config")
         )
         # TODO: Is there a better way to get the paths?
         data = response["notification"][0]["update"][0]["val"]["files"]
         logging.info(f"Paths: {data}")
         return {entry["alias"]: entry["path"] for entry in data}
 
-    def _get_path_data(self, paths: Dict[str, str]) -> Dict[str, Dict[str, str]]:
+    def _get_path_data(self, paths: Dict[str, str]) -> Snapshot:
         """Query the paths and return the data
 
         Args:
@@ -100,24 +101,13 @@ class Support(BaseAgent):
 
         Returns:
             Data from the paths in a dictionary in the format:
-                {"path_alias": "data from path"}
+                {"path_alias": {"contents": "data from path"}}
         """
-        # TODO: Use a single gNMI request to get all the data
-        def _query(path: str) -> Dict[str, Any]:
-            """Query the path and return the data"""
-            logging.info(f"Querying path: {path}")
-            try:
-                data = self._gnmi_get(path)["notification"][0]["update"][0]["val"]
-            except grpc.RpcError as e:
-                logging.error(f"Failed to query path: {path}")
-                logging.debug(f"Failed to query path: {path} :: {e}")
-                return {}
-            except Exception as e:
-                logging.error(f"Failed to query path: {path} :: {e}")
-                return {}
-            return data
-
-        responses = {alias: _query(path) for alias, path in paths.items()}
+        res = {
+            path: data["notification"][0]["update"][0]["val"]
+            for path, data in self._gnmi_get(paths.values()).items()
+        }
+        responses = {alias: res[path] for alias, path in paths.items()}
 
         time = datetime.now().strftime(TIME_FORMAT)
         data = {
@@ -126,7 +116,7 @@ class Support(BaseAgent):
         }
         return data
 
-    def _archive_data(self, data: Dict[str, Dict[str, str]]) -> None:
+    def _archive_data(self, data: Snapshot) -> None:
         """Archive data"""
         # TODO: Multiple archive methods should be implemented, how to
         #      configure/select the method to use?

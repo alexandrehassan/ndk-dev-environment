@@ -207,36 +207,47 @@ class BaseAgent(object):
 
     def _gnmi_get(
         self,
-        path: Union[str, List[str]],
+        paths: Union[str, List[str]],
         gnmi_info: gNMI_Info = gNMI_Info(),
         query_info: Get_Info = Get_Info(),
     ) -> dict:
         """Get state data from gNMI server.
         Args:
-            path: Path(s) to state data to be retrieved (string or list of strings).
+            paths: Path(s) to state data to be retrieved (string or list of strings).
             gnmi_info: gNMI server information.
             query_info: Query information.
         Returns:
-            Response from gNMI server as dict.
-            Response Format:
-            {
-                "notification": [
-                    {
-                        "timestamp": 1660737964042766695,
-                        "prefix": None,
-                        "alias": None,
-                        "atomic": False,
-                        "update": [{"path": "metric:metric/flag", "val": True}],
-                    }
-                ]
-            }
+            If a single path is provided, returns the response, otherwise
+            return a dictionary of paths and response data Formatted as:
+                {"path": response}
+
+            response from gNMI server as dict.
+            response Format:
+                {
+                    "notification": [
+                        {
+                            "timestamp": 1660737964042766695,
+                            "prefix": None,
+                            "alias": None,
+                            "atomic": False,
+                            "update": [{"path": "metric:metric/flag", "val": True}],
+                        }
+                    ]
+                }
             to get the value requested, use the following code:
             response["notification"][0]["update"][0]["val"]
         """
-        if isinstance(path, str):
-            path = [path]
+        if isinstance(paths, str):
+            paths = [paths]
         with gNMIclient(**vars(gnmi_info)) as client:
-            return client.get(path=path, **vars(query_info))
+            responses = {}
+            try:
+                for path in paths:
+                    responses[path] = client.get(path=[path], **vars(query_info))
+            except gNMIException as err:
+                logging.error(f"Error for path {path}: err - {err}")
+                raise err
+        return responses if len(responses) > 1 else responses[paths[0]]
 
     def _gnmi_set(
         self,
@@ -255,7 +266,7 @@ class BaseAgent(object):
             Response from gNMI server as dict.
         """
         # TODO: This is a temporary fix to ensure that the data is an iterable.
-        if isinstance(data, Tuple):
+        if isinstance(data, tuple):
             data = [data]
         logging.info(f"Setting data on gNMI server - {data}")
         responses = {}
@@ -307,7 +318,7 @@ class BaseAgent(object):
                     )
                     max_retries -= 1
                     time.sleep(retry_delay)
-            return None
+            raise gNMIException("Error setting data on gNMI server")
 
     def _register_for_notifications(
         self,

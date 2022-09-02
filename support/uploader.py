@@ -1,12 +1,12 @@
 import logging
 import shutil
-from typing import Dict
 import os
 import requests
 import paramiko
 from paramiko import SSHClient
 from scp import SCPClient
 
+from support_agent import Snapshot
 import json
 
 GITHUB_GIST = "https://api.github.com/gists"
@@ -17,10 +17,9 @@ def _mkdir(name: str) -> None:
     path = os.path.join(os.path.dirname(__file__), name)
     if not os.path.exists(path):
         os.mkdir(path)
-    return path
 
 
-def archive(name: str, data: Dict[str, Dict[str, str]], protocol: str = "tar") -> None:
+def archive(name: str, data: Snapshot, protocol: str = "tar") -> None:
     """Write data to an archive
 
     Args:
@@ -36,12 +35,13 @@ def archive(name: str, data: Dict[str, Dict[str, str]], protocol: str = "tar") -
     shutil.make_archive(f"output/{name}", protocol, "output")
 
 
-def upload_to_gists(name: str, files: Dict[str, str], oauth: str) -> None:
+def upload_to_gists(name: str, files: Snapshot, oauth: str) -> None:
     """Upload files to GitHub Gists
 
     Args:
         name: Name of the gist
-        files: Files to upload
+        files: Files to upload in the format:
+            {"filename": {"content": "file contents"}}
         oauth: GitHub OAuth token
     """
     # TODO: This is temporary
@@ -110,11 +110,11 @@ def scp_to_server(server: str, username: str, filename: str, destination: str) -
 def archive_and_scp(
     server: str,
     destination: str,
-    data: Dict[str, Dict[str, str]],
+    data: Snapshot,
     protocol: str = "tar",
 ) -> None:
     archive("archive", data, protocol)
     try:
-        scp_to_server(server, f"output/archive.{protocol}", destination)
+        scp_to_server(server, "root", f"output/archive.{protocol}", destination)
     except Exception as e:
         logging.error(e)
