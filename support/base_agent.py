@@ -50,7 +50,7 @@ from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
 from gnmi_info import Get_Info, Set_Info, gNMI_Info
 
-SetData = Tuple[List[str], str]
+SetData = Tuple[str, List[str]]
 
 
 class BaseAgent(object):
@@ -265,9 +265,9 @@ class BaseAgent(object):
         Returns:
             Response from gNMI server as dict.
         """
-        # TODO: This is a temporary fix to ensure that the data is an iterable.
-        if isinstance(data, tuple):
-            data = [data]
+        # Naive check to see if data is a single tuple or iterable of tuples.
+        if isinstance(data, tuple) and isinstance(data[0], str):
+            data = (data,)
         responses = {}
         with gNMIclient(**vars(gnmi_info)) as client:
             for datapoint in data:

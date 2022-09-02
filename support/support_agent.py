@@ -45,6 +45,8 @@ class Support(BaseAgent):
         js_path = notification.key.js_path
         if js_path.startswith(self.path) and notification.op == OpCode.Change:
             self._handle_config_change(notification)
+        elif notification.op == OpCode.Delete or notification.op == OpCode.Create:
+            pass
         elif js_path == ".commit.end":
             logging.info("Received commit end notification")
         else:
