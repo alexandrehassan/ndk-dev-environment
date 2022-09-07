@@ -91,27 +91,63 @@ class Support(BaseAgent):
             logging.info(f"files notification key has {len(key_list)} keys")
             return
         key = key_list.pop()
-        telem_path = f'{self.path}.files{{.path=="{key}"}}'
 
         if notification.op == OpCode.Delete:
-            logging.info(f"Deleting {key}")
-            removed = self.custom_paths.pop(key, None)
-            if removed:
-                logging.info(f"Removed {key}")
-                self._delete_telemetry(telem_path)
-            else:
-                logging.info(f"{key} not found")
+            # logging.info(f"Deleting {key}")
+            # removed = self.custom_paths.pop(key, None)
+            # if removed:
+            #     logging.info(f"Removed {key}")
+            #     self._delete_telemetry(telem_path)
+            # else:
+            #     logging.info(f"{key} not found")
             return
+        logging.info("\n" * 100)
+        logging.info(f"\n{notification}")
         alias = json.loads(notification.data.json)["files"]["alias"]["value"]
+        telem_path = f'.support.files{{.path=="{key}"}}'
+        t1_path1 = f"support.files[path={key}]"
+        t1_path2 = f".support.files[path={key}].path"
+        t1_path2 = f"support:support/files[path={key}]"
+        t1_path3 = f"support/files[path={key}]"
+        t1_data = {"alias": alias}
+
+        t2_path1 = "support.files"
+        t2_path2 = "/support"
+        t2_path2 = "support:support/files"
+        t2_path3 = "support/files"
+        t2_data = {"alias": alias, "path": key}
+
         if notification.op == OpCode.Create:
-            logging.info(f"Creating {key}")
-            assert key not in self.custom_paths
-            self.custom_paths[key] = alias
+            # self._update_telemetry(telem_path, {"alias": alias})
+            logging.info(f"testing path: {t1_path1} with data: {t1_data}")
+            self._update_telemetry(t1_path1, t1_data)
+            logging.info(f'Query after\n{gnmi_get("support:support")}')
+
+            logging.info(f"testing path: {t1_path2} with data: {t1_data}")
+            self._update_telemetry(t1_path2, t1_data)
+            logging.info(f'Query after\n{gnmi_get("support:support")}')
+
+            logging.info(f"testing path: {t1_path3} with data: {t1_data}")
+            self._update_telemetry(t1_path3, t1_data)
+            logging.info(f'Query after\n{gnmi_get("support:support")}')
+
+            logging.info(f"testing path: {t2_path1} with data: {t2_data}")
+            self._update_telemetry(t2_path1, t2_data)
+            logging.info(f'Query after\n{gnmi_get("support:support")}')
+
+            logging.info(f"testing path: {t2_path2} with data: {t2_data}")
+            self._update_telemetry(t2_path2, t2_data)
+            logging.info(f'Query after\n{gnmi_get("support:support")}')
+
+            logging.info(f"testing path: {t2_path3} with data: {t2_data}")
+            self._update_telemetry(t2_path3, t2_data)
+            logging.info(f'Query after\n{gnmi_get("support:support")}')
+
+            logging.info(f"\n\nResult with correct request: {telem_path}")
             self._update_telemetry(telem_path, {"alias": alias})
+            logging.info(f'Query after\n{gnmi_get("support:support")}')
+
         elif notification.op == OpCode.Change:
-            logging.info(f"Changing {key}")
-            assert key in self.custom_paths
-            self.custom_paths[key] = alias
             self._update_telemetry(telem_path, {"alias": alias})
         else:
             logging.info(f"Unhandled notification: {notification}")

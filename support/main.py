@@ -13,7 +13,7 @@ agent_name = "support"
 
 if __name__ == "__main__":
 
-    log_filename = f"/var/log/srlinux/stdout/{agent_name}.log"
+    log_filename = f"/var/log/srlinux/stdout/{agent_name}1.log"
     logging.basicConfig(
         handlers=[RotatingFileHandler(log_filename, maxBytes=3000000, backupCount=5)],
         format="%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s",

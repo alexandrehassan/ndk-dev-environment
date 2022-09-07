@@ -212,11 +212,15 @@ class BaseAgent(object):
         telemetry_info.key.js_path = path_json
         telemetry_info.data.json_content = json.dumps(data_json)
 
+        logging.info(f"Request:\nstate: {telemetry_info}")
         # Send the telemetry update request.
         response = self.sdk_telemetry_client.TelemetryAddOrUpdate(
             request=telemetry_update_request, metadata=self.metadata
         )
 
+        logging.info(
+            f"Raw Response:\nstatus: {response.status}\nerror_str: {response.error_str}"
+        )
         # Check the response.
         if response.status == sdk_status.kSdkMgrSuccess:
             logging.info("Telemetry update successful")
