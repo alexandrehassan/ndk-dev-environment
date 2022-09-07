@@ -23,11 +23,3 @@ class Get_Info:
     def __init__(self, encoding: str = "json_ietf", datatype: str = "all"):
         self.encoding = encoding
         self.datatype = datatype
-
-
-class Set_Info:
-    """
-    Class to store set info"""
-
-    def __init__(self, encoding: str = "json_ietf"):
-        self.encoding = encoding

@@ -39,8 +39,15 @@ module support {
         leaf ready_to_run {
             type boolean;
             default false;
+            config false;
             description
               "ready to run the support container";
+        }
+        leaf use_default_paths {
+            type boolean;
+            default true;
+            description
+              "Set to false for the support agent not to query the default paths";
         }
     }
 }

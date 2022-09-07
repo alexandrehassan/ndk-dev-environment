@@ -3,7 +3,7 @@
 
 import threading
 from types import TracebackType
-from typing import Generator, Iterable, List, Optional, Tuple, Type, Union
+from typing import Generator, List, Optional, Tuple, Type, Union
 import grpc
 import sys
 import logging
@@ -50,7 +50,7 @@ from ndk.nexthop_group_service_pb2 import (
 )
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
-from gnmi_info import Get_Info, Set_Info, gNMI_Info
+from gnmi_info import Get_Info, gNMI_Info
 
 SetData = Tuple[str, List[str]]
 
@@ -222,6 +222,28 @@ class BaseAgent(object):
             logging.info("Telemetry update successful")
         else:
             logging.warning(f"Telemetry update failed error: {response.error_str}")
+
+    def _delete_telemetry(self, js_path: str):
+        """Delete telemetry data.
+
+        Parameters:
+            js_path: js_path of the telemetry data to be deleted.
+        """
+        telemetry_delete_request = telemetry_service_pb2.TelemetryDeleteRequest()
+
+        # Form data to be sent to the telemetry service.
+        telemetry_delete_request.key.add().js_path = js_path
+
+        # Send the telemetry delete request.
+        response = self.sdk_telemetry_client.TelemetryDelete(
+            request=telemetry_delete_request, metadata=self.metadata
+        )
+
+        # Check the response.
+        if response.status == sdk_status.kSdkMgrSuccess:
+            logging.info("Telemetry delete successful")
+        else:
+            logging.warning(f"Telemetry delete failed error: {response.error_str}")
 
     def _get_notifications(self) -> Generator[Notification, None, None]:
         """Checks for notifications.
@@ -462,68 +484,3 @@ def gnmi_get(
             logging.error(f"Error for path {path}: err - {err}")
             raise err
     return responses if len(responses) > 1 else responses[paths[0]]
-
-
-def gnmi_set(
-    data: Union[SetData, Iterable[SetData]],
-    *,
-    gnmi_info: gNMI_Info = gNMI_Info(),
-    query_info: Set_Info = Set_Info(),
-):
-    """Set data on gNMI server.
-    Args:
-        data: Tuple containing path and value to set or
-            iterable of tuples containing path and value to set.
-        gnmi_info: gNMI server information.
-        query_info: Query information.
-
-    Returns:
-        Response from gNMI server as dict.
-    """
-    # Naive check to see if data is a single tuple or iterable of tuples.
-    if isinstance(data, tuple) and isinstance(data[0], str):
-        data = (data,)
-    responses = {}
-    with gNMIclient(**vars(gnmi_info)) as client:
-        for datapoint in data:
-            logging.info(f"Setting data on gNMI server - {datapoint}")
-            try:
-                response = client.set(update=[datapoint], **vars(query_info))
-            except gNMIException as e:
-                logging.error(f"Error setting data on gNMI server, continuing: {e}")
-                response = None
-            responses[datapoint[0]] = response
-    return response
-
-
-def gnmi_set_retry(
-    data: SetData,
-    *,
-    max_retries: int = 30,
-    retry_delay: int = 1,
-    gnmi_info: gNMI_Info = gNMI_Info(),
-    query_info: Set_Info = Set_Info(),
-) -> dict:
-    """Set data on gNMI server retrying if necessary.
-    Args:
-        data: Tuple containing path and value to set.
-        max_retries: Maximum number of retries.
-        retry_delay: Delay between retries. (seconds)
-        gnmi_info: gNMI server information.
-        query_info: Query information.
-
-    Returns:
-        Response from gNMI server as dict, or None if unsuccessful.
-    """
-    with gNMIclient(**vars(gnmi_info)) as client:
-        while max_retries > 0:
-            try:
-                response = client.set(update=[data], **vars(query_info))
-                logging.info(
-                    f"Succesfully set data on gNMI server - {data[0]} - {data[1]}"
-                )
-                return response
-            except gNMIException:
-                max_retries -= 1
-                time.sleep(retry_delay)
-        raise gNMIException("Error setting data on gNMI server")

@@ -37,20 +37,20 @@ ifdef cleanup
 	CLEANUP := --cleanup
 endif
 
-init: venv
-	mkdir -p logs/srl1 logs/srl2 build lab tests/lab $(APPNAME) $(APPNAME)/yang $(APPNAME)/wheels
+# init: venv
+# 	mkdir -p logs/srl1 logs/srl2 build lab tests/lab $(APPNAME) $(APPNAME)/yang $(APPNAME)/wheels
 	
-	docker run --rm -e APPNAME=${APPNAME} -e CLASSNAME=${CLASSNAME} -v $$(pwd):/tmp hairyhenderson/gomplate:stable --input-dir /tmp/.gen --output-map='/tmp/{{ .in | strings.TrimSuffix ".tpl" }}'
-	sudo chown -R $$(id -u):$$(id -g) .
-	mv agent.yang ${APPNAME}/yang/${APPNAME}.yang
-	mv agent-config.yml ${APPNAME}.yml
-	mv dev.clab.yml lab/
-	mv tests/$(TESTLABFILE) tests/lab
-	mv main.py run.sh ${APPNAME}/
-	mv base_agent.py ${APPNAME}/
-	mv ${APPNAME}_agent.py ${APPNAME}/
-	sed -i 's/${APPNAME}/${APPNAME}/g' Makefile
-	cp .gen/.gitignore .
+# 	docker run --rm -e APPNAME=${APPNAME} -e CLASSNAME=${CLASSNAME} -v $$(pwd):/tmp hairyhenderson/gomplate:stable --input-dir /tmp/.gen --output-map='/tmp/{{ .in | strings.TrimSuffix ".tpl" }}'
+# 	sudo chown -R $$(id -u):$$(id -g) .
+# 	mv agent.yang ${APPNAME}/yang/${APPNAME}.yang
+# 	mv agent-config.yml ${APPNAME}.yml
+# 	mv dev.clab.yml lab/
+# 	mv tests/$(TESTLABFILE) tests/lab
+# 	mv main.py run.sh ${APPNAME}/
+# 	mv base_agent.py ${APPNAME}/
+# 	mv ${APPNAME}_agent.py ${APPNAME}/
+# 	sed -i 's/${APPNAME}/${APPNAME}/g' Makefile
+# 	cp .gen/.gitignore .
 
 venv:
 	python3 -m venv .venv
