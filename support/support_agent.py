@@ -26,10 +26,10 @@ class Support(BaseAgent):
     def __init__(self, name):
         super().__init__(name)
         self.path = ".support"
-        self._use_default_paths = True
-        self._is_running = False
-        self._ready_to_run = False
-        self.custom_paths = {}
+        self._use_default_paths: bool = True
+        self._is_running: bool = False
+        self._ready_to_run: bool = False
+        self.custom_paths: Dict[str, str] = {}
 
     def __enter__(self):
         super().__enter__()
@@ -76,43 +76,56 @@ class Support(BaseAgent):
 
     def _run_agent(self):
         """Run the agent"""
-        logging.info("Running agent")
+        logging.info("Archiving data from paths")
         self._signal_begin_run()
-        paths = {**self.custom_paths}
-        if self._use_default_paths:
-            paths.update(DEFAULT_PATHS)
+
+        # The paths to query only include the default paths if the use_default_paths
+        # flag is set to true
+        paths = (
+            {**self.custom_paths, **DEFAULT_PATHS}
+            if self._use_default_paths
+            else {**self.custom_paths}
+        )
+
         snapshot = self._get_path_snapshot(paths)
         self._archive_snapshot(snapshot)
         self._signal_end_of_run()
 
     def _handle_files_notification(self, notification: ConfigNotification) -> None:
         key_list = notification.key.keys
+
+        # There should only be one key in the list for this notification
         if len(key_list) != 1:
             logging.info(f"files notification key has {len(key_list)} keys")
             return
         key = key_list.pop()
-        telem_path = f'{self.path}.files{{.path=="{key}"}}'
 
+        # Form the telemetry path
+        telemetry_path = f'.{self.path}.files{{.path=="{key}"}}'
+
+        # Handle path deletion
         if notification.op == OpCode.Delete:
-            logging.info(f"Deleting {key}")
+            logging.debug(f"Received delete notification for path {key}")
             removed = self.custom_paths.pop(key, None)
             if removed:
-                logging.info(f"Removed {key}")
-                self._delete_telemetry(telem_path)
+                logging.info(f"Removed {removed}")
+                self._delete_telemetry(telemetry_path)
             else:
                 logging.info(f"{key} not found")
             return
+
+        # Handle path creation or change
         alias = json.loads(notification.data.json)["files"]["alias"]["value"]
         if notification.op == OpCode.Create:
             logging.info(f"Creating {key}")
             assert key not in self.custom_paths
             self.custom_paths[key] = alias
-            self._update_telemetry(telem_path, {"alias": alias})
+            self._update_telemetry(telemetry_path, {"alias": alias})
         elif notification.op == OpCode.Change:
             logging.info(f"Changing {key}")
             assert key in self.custom_paths
             self.custom_paths[key] = alias
-            self._update_telemetry(telem_path, {"alias": alias})
+            self._update_telemetry(telemetry_path, {"alias": alias})
         else:
             logging.info(f"Unhandled notification: {notification}")
 
@@ -127,7 +140,6 @@ class Support(BaseAgent):
                 {"path_alias": {"contents": "data from path"}}
         """
         logging.info(f"Snapshot of paths - {paths}")
-        logging.info(f"Query response = {gnmi_get(paths.keys())}")
         res = {
             path: json.dumps(_get_val(data))
             for path, data in gnmi_get(paths.keys()).items()
@@ -153,7 +165,6 @@ class Support(BaseAgent):
         """Signal that the agent is ready to run"""
         self._ready_to_run = True
         self._update_telemetry(self.path, {"run": False, "ready_to_run": True})
-        # self._update_telemetry(self.path, {"ready_to_run": True})
 
     def _signal_begin_run(self):
         """Signal that the agent is ready to run"""
@@ -179,6 +190,8 @@ class Support(BaseAgent):
         except Exception as e:
             raise e
         finally:
+            # Reset the telemetry data so that the agent can be run again
+            self._update_telemetry(self.path, {"run": False, "ready_to_run": False})
             logging.info("End of notification stream reading")
 
 

@@ -4,12 +4,21 @@ class gNMI_Info:
 
     def __init__(
         self,
-        target_path: str = "unix:///opt/srlinux/var/run/sr_gnmi_server",
-        target_port: int = 57400,
-        username: str = "admin",
-        password: str = "admin",
-        insecure: bool = True,
-    ):
+        target_path: str,
+        target_port: int,
+        username: str,
+        password: str,
+        insecure: bool,
+    ) -> None:
+        """Initialize gNMI_Info object
+
+        Args:
+            target_path: Path to gNMI target
+            target_port: Port to gNMI target
+            username: Username for gNMI target
+            password: Password for gNMI target
+            insecure: Whether to use insecure gNMI connection
+        """
         self.target = (target_path, target_port)
         self.username = username
         self.password = password

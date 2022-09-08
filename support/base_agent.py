@@ -50,9 +50,12 @@ from ndk.nexthop_group_service_pb2 import (
 )
 from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
-from gnmi_info import Get_Info, gNMI_Info
+from gnmi_info import gNMI_Info
 
 SetData = Tuple[str, List[str]]
+
+DATATYPES = {"all", "config", "state", "operational"}
+ENCODINGS = {"json", "bytes", "proto", "ascii", "json_ietf"}
 
 
 class BaseAgent(object):
@@ -61,10 +64,35 @@ class BaseAgent(object):
         self.metadata = [("agent_name", self.name)]
         self.stream_id = None
         self.keepalive_interval = 10
+        self.set_default_gnmi_info()
 
         signal.signal(signal.SIGTERM, self._handle_sigterm)
         signal.signal(signal.SIGHUP, self._handle_sighup)
         signal.signal(signal.SIGQUIT, self._handle_sigquit)
+
+    def set_default_gnmi_info(self, gnmi_info: gNMI_Info = None) -> None:
+        """Set the default gNMI info for the agent.
+
+        Args:
+            gnmi_info (gNMI_Info, optional): gNMI info to be used as defaults
+
+        If no gNMI info is provided, defaults are:
+            target_path: "unix:///opt/srlinux/var/run/sr_gnmi_server"
+            target_port: 57400
+            username: "admin"
+            password: "admin"
+            insecure: True
+
+        """
+        if gnmi_info is None:
+            gnmi_info = gNMI_Info(
+                target_path="unix:///opt/srlinux/var/run/sr_gnmi_server",
+                target_port=57400,
+                username="admin",
+                password="admin",
+                insecure=True,
+            )
+        self.default_gnmi_info = gnmi_info
 
     def __enter__(self):
         """Handles basic agent registration.
@@ -198,12 +226,21 @@ class BaseAgent(object):
     def run(self):
         logging.warning("Run() function not implemented")
 
-    def _update_telemetry(self, path_json: str, data_json: str) -> None:
+    def _update_telemetry(self, path_json: str, data_json: str) -> bool:
         """Update telemetry data.
 
-        Parameters:
+        Args:
             path_json: JSON string containing the path to the telemetry data.
             data_json: JSON string containing the telemetry data to be updated.
+
+        Returns:
+            True if the update was successful, False otherwise.
+
+        Notes:
+            The path_json and data_json strings are expected to be in "." notation.
+            For example, the path to "interface[name=ethernet-1/1]/vlan-tagging"
+            would be:
+                .interface{.name=="ethernet-1/1"}.vlan-tagging
         """
         telemetry_update_request = telemetry_service_pb2.TelemetryUpdateRequest()
 
@@ -223,11 +260,21 @@ class BaseAgent(object):
         else:
             logging.warning(f"Telemetry update failed error: {response.error_str}")
 
-    def _delete_telemetry(self, js_path: str):
+        return response.status
+
+    def _delete_telemetry(self, js_path: str) -> bool:
         """Delete telemetry data.
 
-        Parameters:
+        Args:
             js_path: js_path of the telemetry data to be deleted.
+
+        Returns:
+            True if the delete was successful, False otherwise.
+        Notes:
+            The path_json and data_json strings are expected to be in "." notation.
+            For example, the path to "interface[name=ethernet-1/1]/vlan-tagging"
+            would be:
+                .interface{.name=="ethernet-1/1"}.vlan-tagging
         """
         telemetry_delete_request = telemetry_service_pb2.TelemetryDeleteRequest()
 
@@ -244,6 +291,8 @@ class BaseAgent(object):
             logging.info("Telemetry delete successful")
         else:
             logging.warning(f"Telemetry delete failed error: {response.error_str}")
+
+        return response.status
 
     def _get_notifications(self) -> Generator[Notification, None, None]:
         """Checks for notifications.
@@ -262,6 +311,7 @@ class BaseAgent(object):
 
     def _register_for_notifications(
         self,
+        *,  # Force keyword arguments only
         intf_request: InterfaceSubscriptionRequest = None,
         nw_request: NetworkInstanceSubscriptionRequest = None,
         lldp_neighbor_request: LldpNeighborSubscriptionRequest = None,
@@ -270,7 +320,7 @@ class BaseAgent(object):
         route_request: IpRouteSubscriptionRequest = None,
         appid_request: AppIdentSubscriptionRequest = None,
         nhg_request: NextHopGroupSubscriptionRequest = None,
-    ):
+    ) -> bool:
         """Agent subscribes to notifications from the SDK Manager.
 
         Args:
@@ -303,13 +353,12 @@ class BaseAgent(object):
         response = self.sdk_mgr_client.NotificationRegister(
             request=request, metadata=self.metadata
         )
-        success = response.status == sdk_status.kSdkMgrSuccess
         msg_str = f"stream_id: {response.stream_id} sub_id: {response.sub_id}"
-        if success:
+        if response.status == sdk_status.kSdkMgrSuccess:
             logging.info(f"Subscribed successfully :: {msg_str}")
         else:
             logging.error(f"Failed to subscribe :: {msg_str}")
-        return response.status == sdk_status.kSdkMgrSuccess
+        return response.status
 
     def _handle_notification(self, notification: Notification):
         """
@@ -440,24 +489,39 @@ class BaseAgent(object):
                     logging.error(f"Failed to change network namespace to {netns_name}")
                     return False
 
+    def gnmi_get(
+        self,
+        paths: Union[str, List[str]],
+        *,
+        gnmi_info: gNMI_Info = None,
+        encoding: str = "json_ietf",
+        datatype: str = "all",
+    ) -> dict:
+        """Get data from gNMI server.
+        Args:
+            paths: Path(s) to state data to be retrieved (string or list of strings).
+            gnmi_info: gNMI server information if not uses the default
+                information for the agent.
+            encoding: Encoding format for the data to be retrieved.
+            datatype: Type of data to be retrieved (all, config, state).
+        Returns:
+            If the given path is a string, returns the response, otherwise
+            return a dictionary of paths and response data Formatted as:
+                {"path": response from gNMI server as dict}
 
-def gnmi_get(
-    paths: Union[str, List[str]],
-    *,
-    gnmi_info: gNMI_Info = gNMI_Info(),
-    query_info: Get_Info = Get_Info(),
-) -> dict:
-    """Get state data from gNMI server.
-    Args:
-        paths: Path(s) to state data to be retrieved (string or list of strings).
-        gnmi_info: gNMI server information.
-        query_info: Query information.
-    Returns:
-        If a single path is provided, returns the response, otherwise
-        return a dictionary of paths and response data Formatted as:
-            {"path": response}
+        Valid datatype values:
+          - all
+          - config
+          - state
+          - operational
 
-        response from gNMI server as dict.
+        Valid encoding values:
+          - json
+          - bytes
+          - proto
+          - ascii
+          - json_ietf
+
         response Format:
             {
                 "notification": [
@@ -466,21 +530,34 @@ def gnmi_get(
                         "prefix": None,
                         "alias": None,
                         "atomic": False,
-                        "update": [{"path": "metric:metric/flag", "val": True}],
+                        "update": [{"path": "path", "val": Requested data}],
                     }
                 ]
             }
         to get the value requested, use the following code:
         response["notification"][0]["update"][0]["val"]
-    """
-    if isinstance(paths, str):
-        paths = [paths]
-    with gNMIclient(**vars(gnmi_info)) as client:
-        responses = {}
-        try:
-            for path in paths:
-                responses[path] = client.get(path=[path], **vars(query_info))
-        except gNMIException as err:
-            logging.error(f"Error for path {path}: err - {err}")
-            raise err
-    return responses if len(responses) > 1 else responses[paths[0]]
+        """
+        gnmi_info = gnmi_info if gnmi_info else self.default_gnmi_info
+
+        # Check that the data type is valid
+        datatype = datatype.lower()
+        if datatype not in DATATYPES:
+            raise ValueError(f"Invalid datatype: {datatype}")
+
+        # Check that the encoding is valid
+        encoding = encoding.lower()
+        if encoding not in ENCODINGS:
+            raise ValueError(f"Invalid encoding: {encoding}")
+
+        query_info = {"encoding": encoding, "datatype": datatype}
+        if single_request := isinstance(paths, str):
+            paths = [paths]
+        with gNMIclient(**vars(gnmi_info)) as client:
+            responses = {}
+            try:
+                for path in paths:
+                    responses[path] = client.get(path=[path], **query_info)
+            except gNMIException as err:
+                logging.error(f"Error for path {path}: err - {err}")
+                raise err
+        return responses[paths[0]] if single_request else responses
