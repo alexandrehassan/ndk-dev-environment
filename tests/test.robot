@@ -50,27 +50,43 @@ Test agent start
     ...    Agent Should Run
     Sleep    5
     
-Test agent defaults
-   Wait Until Keyword Succeeds    30x    1s
-   ...    Agent Should Run
-   Wait Until Keyword Succeeds    5x    1s
-   ...    Agent Defaults
+# Test agent defaults
+#    Wait Until Keyword Succeeds    30x    1s
+#    ...    Agent Should Run
+#    Wait Until Keyword Succeeds    5x    1s
+#    ...    Agent Defaults
 
-Test agent archive
-    # Clear the output directory
-    Empty Directory    output/        
-    # Wait for the agent to be ready to run
-    Wait Until Keyword Succeeds    30x    1s
-    ...    agent_is_ready_to_run
-    # The agent Run value is a command trigger and should be false
-    Agent Run False
-    # Set the agent Run value to true, to signal the agent to archive
-    trigger_agent
-    # Wait for the agent to archive
-    Sleep   1s
-    # An archive should have been created
-    OperatingSystem.File Should exist    output/archive.tar
-    # The agent should be ready to run again
-    Agent Run False
-    # Clear the output directory
-    Empty Directory    output/
+Test agent initial state
+    ${result}=    agent_initial_state
+    Should Be True    ${result}
+
+Test add path
+    ${result}=    paths_added_to_state
+    Should Be True    ${result}
+
+Test remove path
+    ${result}=    paths_removed_from_state
+    Should Be True    ${result}
+
+Test modify path
+    ${result}=    paths_modified_in_state
+    Should Be True    ${result}
+
+# Test agent archive
+#     # Clear the output directory
+#     Empty Directory    output/        
+#     # Wait for the agent to be ready to run
+#     Wait Until Keyword Succeeds    30x    1s
+#     ...    agent_is_ready_to_run
+#     # The agent Run value is a command trigger and should be false
+#     Agent Run False
+#     # Set the agent Run value to true, to signal the agent to archive
+#     trigger_agent
+#     # Wait for the agent to archive
+#     Sleep   1s
+#     # An archive should have been created
+#     OperatingSystem.File Should exist    output/archive.tar
+#     # The agent should be ready to run again
+#     Agent Run False
+#     # Clear the output directory
+#     Empty Directory    output/

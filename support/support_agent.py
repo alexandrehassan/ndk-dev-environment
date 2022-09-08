@@ -1,10 +1,11 @@
 import logging
+import sys
 from typing import Dict
 import grpc
 import json
 from datetime import datetime
 
-from base_agent import BaseAgent, gnmi_get
+from base_agent import BaseAgent
 import uploader
 
 from ndk.config_service_pb2 import ConfigSubscriptionRequest, ConfigNotification
@@ -19,6 +20,12 @@ DEFAULT_PATHS = {
     "support/files[path=running:/]": "running",
     "support/files[path=state:/]": "state",
     "support/files[path=show:/interface]": "show_interface",
+}
+
+DEFAULT_TELEMETRY_DATA = {
+    "run": False,
+    "ready_to_run": False,
+    "use_default_paths": True,
 }
 
 
@@ -101,7 +108,7 @@ class Support(BaseAgent):
         key = key_list.pop()
 
         # Form the telemetry path
-        telemetry_path = f'.{self.path}.files{{.path=="{key}"}}'
+        telemetry_path = f'{self.path}.files{{.path=="{key}"}}'
 
         # Handle path deletion
         if notification.op == OpCode.Delete:
@@ -142,7 +149,7 @@ class Support(BaseAgent):
         logging.info(f"Snapshot of paths - {paths}")
         res = {
             path: json.dumps(_get_val(data))
-            for path, data in gnmi_get(paths.keys()).items()
+            for path, data in self._gnmi_get(paths.keys()).items()
         }
 
         # Filter out the null values TODO
@@ -161,11 +168,6 @@ class Support(BaseAgent):
         #      configure/select the method to use?
         uploader.archive("archive", snapshot)
 
-    def _signal_ready(self):
-        """Signal that the agent is ready to run"""
-        self._ready_to_run = True
-        self._update_telemetry(self.path, {"run": False, "ready_to_run": True})
-
     def _signal_begin_run(self):
         """Signal that the agent is ready to run"""
         self._is_running = True
@@ -178,7 +180,7 @@ class Support(BaseAgent):
 
     def run(self):
         try:
-            self._signal_ready()
+            self._update_telemetry(self.path, DEFAULT_TELEMETRY_DATA)
             if self._change_netns(NET_NS):
                 logging.info(f"Changed to network namespace: {NET_NS}")
             for obj in self._get_notifications():
@@ -190,9 +192,14 @@ class Support(BaseAgent):
         except Exception as e:
             raise e
         finally:
-            # Reset the telemetry data so that the agent can be run again
-            self._update_telemetry(self.path, {"run": False, "ready_to_run": False})
             logging.info("End of notification stream reading")
+
+    def _handle_sigterm(self, *arg):
+        """Handle SIGTERM"""
+        logging.info("Agent received SIGTERM, exiting")
+        self._update_telemetry(self.path, DEFAULT_TELEMETRY_DATA)
+        self._unregister_agent()
+        sys.exit(0)
 
 
 def _get_val(message: dict):

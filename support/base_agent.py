@@ -177,15 +177,20 @@ class BaseAgent(object):
         """
         logging.info("Received SIGTERM, exiting")
         # Unregister agent
+        self._unregister_agent()
+        sys.exit()
+
+    def _unregister_agent(self):
+        """Attempt to unregister the agent from the SDK Manager."""
+        logging.debug("Unregistering agent")
         unregister_request = AgentRegistrationRequest()
-        unregister_response = self.sdk_mgr_client.AgentUnRegister(
+        response = self.sdk_mgr_client.AgentUnRegister(
             request=unregister_request, metadata=self.metadata
         )
-        if unregister_response.status == sdk_status.kSdkMgrSuccess:
+        if response.status == sdk_status.kSdkMgrSuccess:
             logging.info("Agent unregistered successfully")
         else:
-            logging.warning("Agent unregistration failed")
-        sys.exit()
+            logging.warning(f"Agent unregistration failed - {response.error_str}")
 
     def _handle_sighup(self, *arg):
         """Agent recieved SIGHUP signal.
@@ -489,7 +494,7 @@ class BaseAgent(object):
                     logging.error(f"Failed to change network namespace to {netns_name}")
                     return False
 
-    def gnmi_get(
+    def _gnmi_get(
         self,
         paths: Union[str, List[str]],
         *,
@@ -550,7 +555,8 @@ class BaseAgent(object):
             raise ValueError(f"Invalid encoding: {encoding}")
 
         query_info = {"encoding": encoding, "datatype": datatype}
-        if single_request := isinstance(paths, str):
+        single_request = isinstance(paths, str)
+        if single_request:
             paths = [paths]
         with gNMIclient(**vars(gnmi_info)) as client:
             responses = {}
