@@ -1,10 +1,9 @@
 import logging
 import sys
 from typing import Dict
-import grpc
 import json
 from datetime import datetime
-
+import grpc
 from base_agent import BaseAgent
 import uploader
 
@@ -17,9 +16,9 @@ Path = Dict[str, str]
 TIME_FORMAT = "%Y-%m-%d-%H.%M.%S"
 NET_NS = "srbase-mgmt"
 DEFAULT_PATHS = {
-    "support/files[path=running:/]": "running",
-    "support/files[path=state:/]": "state",
-    "support/files[path=show:/interface]": "show_interface",
+    "running:/": "running",
+    "state:/": "state",
+    "show:/interface": "show_interface",
 }
 
 DEFAULT_TELEMETRY_DATA = {
@@ -76,7 +75,7 @@ class Support(BaseAgent):
                 self._run_agent()
             else:
                 logging.info("Not ready to run")
-                self._signal_end_of_run()
+                self._update_agent_telemetry()
         if "use_default_paths" in json_data:
             self._use_default_paths = json_data["use_default_paths"]["value"]
             logging.info(f"use_default_paths = {self._use_default_paths}")
@@ -84,7 +83,8 @@ class Support(BaseAgent):
     def _run_agent(self):
         """Run the agent"""
         logging.info("Archiving data from paths")
-        self._signal_begin_run()
+        self._is_running = True
+        self._update_agent_telemetry()
 
         # The paths to query only include the default paths if the use_default_paths
         # flag is set to true
@@ -96,7 +96,8 @@ class Support(BaseAgent):
 
         snapshot = self._get_path_snapshot(paths)
         self._archive_snapshot(snapshot)
-        self._signal_end_of_run()
+        self._is_running = False
+        self._update_agent_telemetry()
 
     def _handle_files_notification(self, notification: ConfigNotification) -> None:
         key_list = notification.key.keys
@@ -168,38 +169,47 @@ class Support(BaseAgent):
         #      configure/select the method to use?
         uploader.archive("archive", snapshot)
 
-    def _signal_begin_run(self):
-        """Signal that the agent is ready to run"""
-        self._is_running = True
-        self._update_telemetry(self.path, {"run": True})
-
-    def _signal_end_of_run(self):
-        """Signal end of run"""
-        self._is_running = False
-        self._update_telemetry(self.path, {"run": False})
+    def _update_agent_telemetry(self):
+        """Update the agent telemetry"""
+        data = {
+            "run": self._is_running,
+            "ready_to_run": self._ready_to_run,
+            "use_default_paths": self._use_default_paths,
+        }
+        self._update_telemetry(self.path, data)
 
     def run(self):
         try:
-            self._update_telemetry(self.path, DEFAULT_TELEMETRY_DATA)
+            # Set the initial state of the agent
+            self._update_agent_telemetry()
             if self._change_netns(NET_NS):
                 logging.info(f"Changed to network namespace: {NET_NS}")
+
+            # Signal that the agent is ready to run
+            self._ready_to_run = True
+            self._update_agent_telemetry()
+
+            # Main loop
             for obj in self._get_notifications():
                 self._handle_notification(obj)
         except SystemExit:
             logging.info("Handling SystemExit")
-        except grpc._channel._Rendezvous as err:
-            logging.error(f"Handling grpc exception: {err}")
+        except grpc._channel._MultiThreadedRendezvous:
+            logging.info("grpc._channel._MultiThreadedRendezvous exception")
         except Exception as e:
-            raise e
+            logging.error(f"Unhandled exception: {type(e)} - {e}")
         finally:
             logging.info("End of notification stream reading")
 
     def _handle_sigterm(self, *arg):
         """Handle SIGTERM"""
-        logging.info("Agent received SIGTERM, exiting")
-        self._update_telemetry(self.path, DEFAULT_TELEMETRY_DATA)
-        self._unregister_agent()
-        sys.exit(0)
+        logging.warn("Agent received SIGTERM, exiting")
+        try:
+            self._update_telemetry(self.path, DEFAULT_TELEMETRY_DATA)
+        except Exception:
+            logging.error("Telemetry update failed")
+        finally:
+            sys.exit(0)
 
 
 def _get_val(message: dict):

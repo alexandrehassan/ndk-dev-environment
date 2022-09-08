@@ -35,11 +35,9 @@ class srl:
         return _get_val(result)
 
     def agent_initial_state(self):
-        result = self.gc.get(path=["support"], encoding=enc)
-        result = _get_val(result)
-        return all(
-            [not result["run"], not result["ready_to_run"], result["use_default_paths"]]
-        )
+        result = _get_val(self.gc.get(path=["support"], encoding=enc))
+        # Note: There is no way of checking ready_to_run fast enough to reliably test it
+        return all([not result["run"], result["use_default_paths"]])
 
     def add_custom_path(self, path, alias):
         self.gc.set(
@@ -79,11 +77,7 @@ class srl:
         self.remove_all_paths()
         path = "support:support/run"
         self.add_custom_path(path, "support_run")
-        count = len(
-            self.gc.get(path=["support"], encoding=enc)["notification"][0]["update"][0][
-                "val"
-            ]["files"]
-        )
+        count = len(_get_val(self.gc.get(path=["support"], encoding=enc))["files"])
         self.gc.set(
             update=[(f"/support/files[path={path}]", {"alias": "support_run2"})],
             encoding=enc,
@@ -92,40 +86,19 @@ class srl:
         files = _get_val(result)["files"]
         return len(files) == count and files[0]["alias"] == "support_run2"
 
-    # def get_agent_paths(self):
-    #     result = self.gc.get(
-    #         path=["/support/files"],
-    #         encoding=enc,
-    #         datatype="config",
-    #     )
-    #     print(result)
-    #     return result["notification"][0]["update"][0]["val"]["files"]
+    def agent_run_value(self):
+        result = self.gc.get(path=["support/run"], encoding=enc)
+        # Make sure that the value is actually set to True FIXME: Why does this happen?
+        self.gc.set(update=[("/support/run", _get_val(result))], encoding=enc)
+        try:
+            return _get_val(result)
+        except KeyError:
+            return False
 
-    # def agent_is_ready_to_run(self):
-    #     result = self.gc.get(path=["support"], encoding=enc, datatype="config")
-    #     return result["notification"][0]["update"][0]["val"]["ready_to_run"]
-    # def agent_run_value(self):
-    #     result = self.gc.get(path=["support"], encoding=enc, datatype="config")
-    #     try:
-    #         return result["notification"][0]["update"][0]["val"]["run"]
-    #     except KeyError:
-    #         return False
-
-    # def expected_paths(self):
-    #     paths = {
-    #         "running:/": "running",
-    #         "state:/": "state",
-    #         "show:/interface": "show_interface",
-    #     }
-    #     return paths
-
-    # def default_paths_set(self, actual, expected):
-    #     actual = {x["path"]: x["alias"] for x in actual}
-    #     return set(actual) == set(expected)
-
-    # def trigger_agent(self):
-    #     result = self.gc.set(update=[("/support", {"run": "true"})], encoding=enc)
-    #     print(result)
+    def trigger_agent(self):
+        self.remove_all_paths()
+        result = self.gc.set(update=[("/support/run", True)], encoding=enc)
+        print(result)
 
 
 def _get_val(message: dict):

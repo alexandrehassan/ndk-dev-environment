@@ -162,13 +162,9 @@ class BaseAgent(object):
         if exc_type:
             logging.warning(f"Exception: {exc_type} {exc} :: \n\t{traceback}")
 
-        try:
-            self.sdk_mgr_client.AgentUnRegister(
-                request=AgentRegistrationRequest(),
-                metadata=self.metadata,
-            )
-        except grpc._channel._Rendezvous as err:
-            logging.info(f"Error when unregistering: {err}")
+        self._stop_keepalive()
+        self._unregister_agent()
+
         self.channel.close()
 
     def _handle_sigterm(self, *arg):
@@ -178,15 +174,22 @@ class BaseAgent(object):
         logging.info("Received SIGTERM, exiting")
         # Unregister agent
         self._unregister_agent()
-        sys.exit()
+        sys.exit(0)
 
     def _unregister_agent(self):
         """Attempt to unregister the agent from the SDK Manager."""
         logging.debug("Unregistering agent")
-        unregister_request = AgentRegistrationRequest()
-        response = self.sdk_mgr_client.AgentUnRegister(
-            request=unregister_request, metadata=self.metadata
-        )
+        try:
+            response = self.sdk_mgr_client.AgentUnRegister(
+                request=AgentRegistrationRequest(), metadata=self.metadata
+            )
+        except (
+            grpc._channel._InactiveRpcError,
+            grpc._channel._MultiThreadedRendezvous,
+        ) as err:
+            logging.info("Agent unregistration failed (can't connect to app_mgr)")
+            logging.debug(f"Exception when unregistering: {err}")
+            return
         if response.status == sdk_status.kSdkMgrSuccess:
             logging.info("Agent unregistered successfully")
         else:
@@ -254,6 +257,8 @@ class BaseAgent(object):
         telemetry_info.key.js_path = path_json
         telemetry_info.data.json_content = json.dumps(data_json)
 
+        logging.debug(f"Updating telemetry data: {telemetry_info}")
+
         # Send the telemetry update request.
         response = self.sdk_telemetry_client.TelemetryAddOrUpdate(
             request=telemetry_update_request, metadata=self.metadata
@@ -261,7 +266,7 @@ class BaseAgent(object):
 
         # Check the response.
         if response.status == sdk_status.kSdkMgrSuccess:
-            logging.info("Telemetry update successful")
+            logging.debug("Telemetry update successful")
         else:
             logging.warning(f"Telemetry update failed error: {response.error_str}")
 
