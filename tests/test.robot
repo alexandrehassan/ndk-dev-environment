@@ -39,18 +39,6 @@ Agent Run False
 Test agent running
     Wait Until Keyword Succeeds    30x    1s
     ...    Agent Should Run
-
-Test agent stop
-    stop_agent
-    Wait Until Keyword Succeeds    30x    10s
-    ...    Agent Should Not Run
-    Sleep    5
-
-Test agent start
-    start_agent
-    Wait Until Keyword Succeeds    30x    1s
-    ...    Agent Should Run
-    Sleep    5
     
 Test agent initial state
     agent_initial_state
