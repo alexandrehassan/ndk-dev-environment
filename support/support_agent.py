@@ -22,7 +22,6 @@ DEFAULT_PATHS = {
 }
 
 DEFAULT_TELEMETRY_DATA = {
-    "run": False,
     "ready_to_run": False,
     "use_default_paths": True,
 }
@@ -33,7 +32,6 @@ class Support(BaseAgent):
         super().__init__(name)
         self.path = ".support"
         self._use_default_paths: bool = True
-        self._is_running: bool = False
         self._ready_to_run: bool = False
         self.custom_paths: Dict[str, str] = {}
 
@@ -76,6 +74,7 @@ class Support(BaseAgent):
             else:
                 logging.info("Not ready to run")
                 self._update_agent_telemetry()
+                self._gnmi_set(update=("support/run", False))
         if "use_default_paths" in json_data:
             self._use_default_paths = json_data["use_default_paths"]["value"]
             logging.info(f"use_default_paths = {self._use_default_paths}")
@@ -83,8 +82,6 @@ class Support(BaseAgent):
     def _run_agent(self):
         """Run the agent"""
         logging.info("Archiving data from paths")
-        self._is_running = True
-        self._update_agent_telemetry()
 
         # The paths to query only include the default paths if the use_default_paths
         # flag is set to true
@@ -96,8 +93,9 @@ class Support(BaseAgent):
 
         snapshot = self._get_path_snapshot(paths)
         self._archive_snapshot(snapshot)
-        self._is_running = False
-        self._update_agent_telemetry()
+
+        # Flip the run flag back to false
+        self._gnmi_set(update=(f"support/run", False))
 
     def _handle_files_notification(self, notification: ConfigNotification) -> None:
         key_list = notification.key.keys
@@ -172,7 +170,6 @@ class Support(BaseAgent):
     def _update_agent_telemetry(self):
         """Update the agent telemetry"""
         data = {
-            "run": self._is_running,
             "ready_to_run": self._ready_to_run,
             "use_default_paths": self._use_default_paths,
         }
@@ -198,18 +195,9 @@ class Support(BaseAgent):
             logging.info("grpc._channel._MultiThreadedRendezvous exception")
         except Exception as e:
             logging.error(f"Unhandled exception: {type(e)} - {e}")
+            raise e
         finally:
             logging.info("End of notification stream reading")
-
-    def _handle_sigterm(self, *arg):
-        """Handle SIGTERM"""
-        logging.warn("Agent received SIGTERM, exiting")
-        try:
-            self._update_telemetry(self.path, DEFAULT_TELEMETRY_DATA)
-        except Exception:
-            logging.error("Telemetry update failed")
-        finally:
-            sys.exit(0)
 
 
 def _get_val(message: dict):

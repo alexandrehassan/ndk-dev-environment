@@ -547,22 +547,15 @@ class BaseAgent(object):
         to get the value requested, use the following code:
         response["notification"][0]["update"][0]["val"]
         """
+        self._check_valid_encoding(encoding)
+        self._check_valid_datatype(datatype)
         gnmi_info = gnmi_info if gnmi_info else self.default_gnmi_info
-
-        # Check that the data type is valid
-        datatype = datatype.lower()
-        if datatype not in DATATYPES:
-            raise ValueError(f"Invalid datatype: {datatype}")
-
-        # Check that the encoding is valid
-        encoding = encoding.lower()
-        if encoding not in ENCODINGS:
-            raise ValueError(f"Invalid encoding: {encoding}")
 
         query_info = {"encoding": encoding, "datatype": datatype}
         single_request = isinstance(paths, str)
         if single_request:
             paths = [paths]
+
         with gNMIclient(**vars(gnmi_info)) as client:
             responses = {}
             try:
@@ -572,3 +565,47 @@ class BaseAgent(object):
                 logging.error(f"Error for path {path}: err - {err}")
                 raise err
         return responses[paths[0]] if single_request else responses
+
+    def _gnmi_set(
+        self,
+        *,
+        update: Union[Tuple[str, dict], List[Tuple[str, dict]]] = None,
+        replace: Union[Tuple[str, dict], List[Tuple[str, dict]]] = None,
+        gnmi_info: gNMI_Info = None,
+        encoding: str = "json_ietf",
+    ) -> dict:
+
+        self._check_valid_encoding(encoding)
+        gnmi_info = gnmi_info if gnmi_info else self.default_gnmi_info
+
+        if update is None and replace is None:
+            raise ValueError("Must provide either update or replace")
+
+        # Convert single update/replace to list (an update's key is a str)
+        if update is not None and isinstance(update[0], str):
+            update = [update]
+        if replace is not None and isinstance(replace[0], str):
+            replace = [replace]
+
+        with gNMIclient(**vars(gnmi_info)) as client:
+            response = client.set(update=update, replace=replace, encoding=encoding)
+            logging.info(f"Set response: {response}")
+        return response
+
+    def _check_valid_encoding(self, encoding) -> None:
+        """Check that the encoding is valid. If not, raise an exception."""
+        encoding = encoding.lower()
+        if encoding not in ENCODINGS:
+            raise ValueError(
+                f"Invalid encoding: {encoding} - Valid encodings: {ENCODINGS}"
+            )
+        return encoding
+
+    def _check_valid_datatype(self, datatype) -> None:
+        """Check that the datatype is valid. If not, raise an exception."""
+        datatype = datatype.lower()
+        if datatype not in DATATYPES:
+            raise ValueError(
+                f"Invalid datatype: {datatype} - Valid datatypes: {DATATYPES}"
+            )
+        return datatype

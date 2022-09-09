@@ -72,6 +72,8 @@ Test modify path
     ${result}=    paths_modified_in_state
     Should Be True    ${result}
 
+Test agent run is config only
+    agent_run_not_in_state
 
 Test agent archive
     # Clear the output directory
