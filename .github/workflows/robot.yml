@@ -27,8 +27,6 @@ jobs:
         with:
           path: ./support/.venv
           key: ${{ runner.os }}-venv-${{ hashFiles('requirements.txt') }}
-      - name: Update dependencies
-        run: make update-app
       - name: create output directory
         run: mkdir support/output
       - name: Run automated tests
