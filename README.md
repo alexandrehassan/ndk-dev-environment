@@ -1,15 +1,19 @@
-# Greeter App
+# Support Agent
 
-This repo provides a base agent, the Greeter app and a Makefile for setting up a python based [NDK](https://learn.srlinux.dev/ndk/intro/) development environment. Read more about the approach at [learn.srlinux.dev](https://learn.srlinux.dev/ndk/guide/env/python/).
+When srl users encounter an issue and seek support from peers, they usually are asked to provide config/state information from the node. Given that srl has a very extensive config/state regions, it is cumbersome to extract that information from a lab node and share with a peer. With the support agent we can simplify extraction and sharing parts by having an agent that does it automatically.
 
 ## Features
 
-The Greeter app demonstrates how agent can interact with the whole state and config tree of SR Linux using local gNMI access and the NDK.
+The Support Agent allows an archive containing the state data of given paths automatically.
 
-- It subscribes to configuration using the NDK.
-- It retrieves the "name" from the configuration notification and update the uptime status with a hardcoded value of 8:00 using a telemetry client.
-- It gets the uptime using gNMI. The gNMI client is locally connecting using Unix Domain Socket.
-- It logs "Hello myname, my uptime is 8:00"​.
+- Allows the user to set paths that the agent will query and write the output to a file.
+- Comes with default paths that can be disabled by the user.
+- Paths can be given a alias that will be used as the file name (combined with the timestamp of the query)
+- All the files will be added to an archive. (Further archival methods will be added in the future)
+- Paths that come enabled by default:
+  - `running:/`
+  - `state:/`
+  - `show:/interface`
 
 ## Quickstart
 
@@ -17,27 +21,13 @@ You need [conatinerlab](https://containerlab.dev/install/) to be installed. Mini
 
 Clone the `greeter-app-python` branch.
 
-Initialize the NDK project:
-
-```console
-make
-```
-
-Now you have all the components of an NDK app generated.
-
-Build the lab and deploy the demo application:
+Build the lab and deploy the agent in it:
 
 ```console
 make redeploy-all
 ```
 
-The app named `greeter` is now running the `srl1` and `srl2` containerlab nodes. The `name` configuration parameter defined in the YANG model is available and you can explore the logs of the app by reading the log file:
-
-```console
-tail -f logs/srl1/stdout/support.log
-```
-
-The greeter app logs will show "greeter/name not configured" on startup so you will have to modify the `greeter/name` configuration using the SR Linux CLI.
+The app named `support` is now running the `srl1` and `srl2` containerlab nodes.
 
 ## Modify Agent Configuration
 
@@ -47,29 +37,48 @@ Connect to the SR Linux CLI:
 ssh admin@clab-greeter-dev-srl1
 ```
 
-Once connected switch to the candiate mode:
+Once connected switch to the candidate mode:
 
 ```console
-enter candidate private
+enter candidate
 ```
 
-Change the configuration:
+To add a path to be queried:
 
 ```console
-set greeter name myname
+set support files <filepath> alias <alias for path>
 ```
 
-Commit the change:
+To disable using default paths:
+
+````console
+set support use_default_paths false
+```
+
+Commit the changes:
 
 ```console
 commit now
+````
+
+## To run the agent
+
+Connect to the SR Linux CLI and enter candidate mode:
+
+```console
+ssh admin@clab-greeter-dev-srl1
+enter candidate
 ```
 
-The greeter agent logs will show this: "hello myname, my uptime is 8:00"
+Set the run parameter to true
+
+```console
+set support run true
+```
 
 ## App Deployment
 
-Build a rpm file to deploy the app on hardware or vm by running this command:
+To build the agent:
 
 ```console
 make build-app
