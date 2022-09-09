@@ -1,5 +1,4 @@
 import logging
-import sys
 from typing import Dict
 import json
 from datetime import datetime
@@ -10,25 +9,25 @@ import uploader
 from ndk.config_service_pb2 import ConfigSubscriptionRequest, ConfigNotification
 from ndk.sdk_common_pb2 import SdkMgrOperation as OpCode
 
+logger = logging.getLogger(__name__)
+
 Snapshot = Dict[str, Dict[str, str]]
 Path = Dict[str, str]
 
 TIME_FORMAT = "%Y-%m-%d-%H.%M.%S"
 NET_NS = "srbase-mgmt"
+
 DEFAULT_PATHS = {
     "running:/": "running",
     "state:/": "state",
     "show:/interface": "show_interface",
 }
 
-DEFAULT_TELEMETRY_DATA = {
-    "ready_to_run": False,
-    "use_default_paths": True,
-}
-
 
 class Support(BaseAgent):
     def __init__(self, name):
+        global logger
+        logger = logging.getLogger(f"Agent.{name}")
         super().__init__(name)
         self.path = ".support"
         self._use_default_paths: bool = True
@@ -60,29 +59,25 @@ class Support(BaseAgent):
         elif js_path == ".commit.end":
             pass
         else:
-            logging.info(
+            logger.info(
                 f"Unhandled config notification:{notification.op}\n{notification}"
             )
 
     def _handle_config_change(self, notification):
         """Handle change notification"""
         json_data = json.loads(notification.data.json)
-        logging.info(f"json_data = {json_data}")
         if "run" in json_data and json_data["run"]["value"]:
             if self._ready_to_run:
                 self._run_agent()
             else:
-                logging.info("Not ready to run")
+                logger.info("Not ready to run")
                 self._update_agent_telemetry()
                 self._gnmi_set(update=("support/run", False))
         if "use_default_paths" in json_data:
             self._use_default_paths = json_data["use_default_paths"]["value"]
-            logging.info(f"use_default_paths = {self._use_default_paths}")
 
     def _run_agent(self):
-        """Run the agent"""
-        logging.info("Archiving data from paths")
-
+        """Run the agent's archive function"""
         # The paths to query only include the default paths if the use_default_paths
         # flag is set to true
         paths = (
@@ -91,18 +86,22 @@ class Support(BaseAgent):
             else {**self.custom_paths}
         )
 
+        logger.info(f"Archiving data from ({len(paths)}) path(s)")
+
         snapshot = self._get_path_snapshot(paths)
-        self._archive_snapshot(snapshot)
+        # Snapshots are archived only if they are not empty
+        if snapshot:
+            self._archive_snapshot(snapshot)
 
         # Flip the run flag back to false
-        self._gnmi_set(update=(f"support/run", False))
+        self._gnmi_set(update=("support/run", False))
 
     def _handle_files_notification(self, notification: ConfigNotification) -> None:
         key_list = notification.key.keys
 
         # There should only be one key in the list for this notification
         if len(key_list) != 1:
-            logging.info(f"files notification key has {len(key_list)} keys")
+            logger.info(f"files notification key has {len(key_list)} keys")
             return
         key = key_list.pop()
 
@@ -111,29 +110,29 @@ class Support(BaseAgent):
 
         # Handle path deletion
         if notification.op == OpCode.Delete:
-            logging.debug(f"Received delete notification for path {key}")
+            logger.debug(f"Received delete notification for path {key}")
             removed = self.custom_paths.pop(key, None)
             if removed:
-                logging.info(f"Removed {removed}")
+                logger.info(f"Removed {removed}")
                 self._delete_telemetry(telemetry_path)
             else:
-                logging.info(f"{key} not found")
+                logger.info(f"{key} not found")
             return
 
         # Handle path creation or change
         alias = json.loads(notification.data.json)["files"]["alias"]["value"]
         if notification.op == OpCode.Create:
-            logging.info(f"Creating {key}")
+            logger.info(f"Creating {key}")
             assert key not in self.custom_paths
             self.custom_paths[key] = alias
             self._update_telemetry(telemetry_path, {"alias": alias})
         elif notification.op == OpCode.Change:
-            logging.info(f"Changing {key}")
+            logger.info(f"Changing {key}")
             assert key in self.custom_paths
             self.custom_paths[key] = alias
             self._update_telemetry(telemetry_path, {"alias": alias})
         else:
-            logging.info(f"Unhandled notification: {notification}")
+            logger.info(f"Unhandled notification: {notification}")
 
     def _get_path_snapshot(self, paths: Dict[str, str]) -> Snapshot:
         """Query the paths and return the data
@@ -145,7 +144,6 @@ class Support(BaseAgent):
             Data from the paths in a dictionary in the format:
                 {"path_alias": {"contents": "data from path"}}
         """
-        logging.info(f"Snapshot of paths - {paths}")
         res = {
             path: json.dumps(_get_val(data))
             for path, data in self._gnmi_get(paths.keys()).items()
@@ -153,6 +151,10 @@ class Support(BaseAgent):
 
         # Filter out the null values TODO
         res = {k: v for k, v in res.items() if v != "null"}
+
+        if not res:
+            logger.info("No data to archive")
+            return {}
 
         time = datetime.now().strftime(TIME_FORMAT)
         return {
@@ -180,7 +182,7 @@ class Support(BaseAgent):
             # Set the initial state of the agent
             self._update_agent_telemetry()
             if self._change_netns(NET_NS):
-                logging.info(f"Changed to network namespace: {NET_NS}")
+                logger.info(f"Changed to network namespace: {NET_NS}")
 
             # Signal that the agent is ready to run
             self._ready_to_run = True
@@ -190,19 +192,19 @@ class Support(BaseAgent):
             for obj in self._get_notifications():
                 self._handle_notification(obj)
         except SystemExit:
-            logging.info("Handling SystemExit")
-        except grpc._channel._MultiThreadedRendezvous:
-            logging.info("grpc._channel._MultiThreadedRendezvous exception")
+            logger.info("Handling SystemExit")
+        except grpc.RpcError:
+            logger.info("grpc exception")
         except Exception as e:
-            logging.error(f"Unhandled exception: {type(e)} - {e}")
+            logger.error(f"Unhandled exception: {type(e)} - {e}")
             raise e
         finally:
-            logging.info("End of notification stream reading")
+            logger.info("End of notification stream reading")
 
 
 def _get_val(message: dict):
     try:
         return message["notification"][0]["update"][0]["val"]
     except KeyError as e:
-        logging.info(f"KeyError: {e}\n{message}")
+        logger.info(f"KeyError: {e}\n{message}")
         return None

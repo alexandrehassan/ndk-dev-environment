@@ -37,7 +37,8 @@ class srl:
     def agent_initial_state(self):
         result = self._query_path("support")
         # Note: There is no way of checking ready_to_run fast enough to reliably test it
-        return all(["run" not in result, result["use_default_paths"]])
+        assert "run" not in result, "run found in state, should be config only"
+        assert result["use_default_paths"], "use_default_paths not true by default"
 
     def add_custom_path(self, path, alias):
         self.gc.set(
@@ -51,16 +52,24 @@ class srl:
         # Should start with an empty list
         self._remove_all_paths()
         result = self.gc.get(path=["support/files"], encoding=enc)
-        if "update" in result["notification"][0]:
-            return False
+        assert (
+            "update" not in result["notification"][0]
+        ), f"Path list not empty to start {result}"
+
+        # Check that a path is added correctly
+        # Add the path
         path = "support:support/run"
         alias = "support_run"
         self.add_custom_path(path, alias)
+
+        # Query the new state and check that the path is there
         result = self.gc.get(path=["support"], encoding=enc)
-        if "files" not in _get_val(result) or len(_get_val(result)["files"]) != 1:
-            return False
+        assert "files" in _get_val(result), "No paths found in state"
+        assert len(_get_val(result)["files"]) == 1, "More than one path found in state"
+
         res = _get_val(result)["files"][0]
-        return res["path"] == path and res["alias"] == alias
+        assert res["path"] == path, "Path not found in state"
+        assert res["alias"] == alias, "Path's alias not correct in state"
 
     def delete_custom_path(self, path):
         self.gc.set(delete=[f"/support/files[path={path}]"])
@@ -72,7 +81,7 @@ class srl:
         self.delete_custom_path(path)
         # result = self.gc.get(path=["support"], encoding=enc)
         result = self._query_path("support")
-        return "files" not in result
+        assert "files" not in result
 
     def paths_modified_in_state(self):
         self._remove_all_paths()
@@ -83,33 +92,25 @@ class srl:
             update=[(f"/support/files[path={path}]", {"alias": "support_run2"})],
             encoding=enc,
         )
-        # result = self.gc.get(path=["support"], encoding=enc)
         files = self._query_path("support")["files"]
-        # files = _get_val(result)["files"]
-        return len(files) == count and files[0]["alias"] == "support_run2"
+
+        assert len(files) == count, "A new path was added instead of modified"
+        assert files[0]["alias"] == "support_run2", "Path was not modified"
 
     def agent_run_not_in_state(self):
-        # result = self.gc.get(path=["support"], encoding=enc)
-        # assert "run" not in _get_val(result)
         result = self._query_path("support")
         assert "run" not in result, "run found in state"
-        # result = self.gc.get(path=["support"], encoding=enc, datatype="config")
-        result = self._query_path("support", datatype="config")
-        # assert "run" in _get_val(result)
-        assert "run" in result, "run not found in config"
 
     def agent_run_value(self):
-        # result = self.gc.get(path=["support/run"], encoding=enc, datatype="config")
         try:
-            # return _get_val(result)
             return self._query_path("support/run", datatype="config")
         except KeyError:
+            # If it doesn't exist it means it's false
             return False
 
     def trigger_agent(self):
         self._remove_all_paths()
-        result = self.gc.set(update=[("/support/run", True)], encoding=enc)
-        print(result)
+        self.gc.set(update=[("/support/run", True)], encoding=enc)
 
 
 def _get_val(message: dict):

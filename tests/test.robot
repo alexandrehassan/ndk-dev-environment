@@ -33,6 +33,8 @@ Agent Should Not Run
 Agent Run False
     ${result}=    agent_run_value
     Should Not Be True    ${result}
+
+
 *** Test Cases ***
 Test agent running
     Wait Until Keyword Succeeds    30x    1s
@@ -50,27 +52,17 @@ Test agent start
     ...    Agent Should Run
     Sleep    5
     
-# Test agent defaults
-#    Wait Until Keyword Succeeds    30x    1s
-#    ...    Agent Should Run
-#    Wait Until Keyword Succeeds    5x    1s
-#    ...    Agent Defaults
-
 Test agent initial state
-    ${result}=    agent_initial_state
-    Should Be True    ${result}
+    agent_initial_state
 
 Test add path
-    ${result}=    paths_added_to_state
-    Should Be True    ${result}
+    paths_added_to_state
 
 Test remove path
-    ${result}=    paths_removed_from_state
-    Should Be True    ${result}
+    paths_removed_from_state
 
 Test modify path
-    ${result}=    paths_modified_in_state
-    Should Be True    ${result}
+    paths_modified_in_state
 
 Test agent run is config only
     agent_run_not_in_state

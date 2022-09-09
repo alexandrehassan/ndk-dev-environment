@@ -52,14 +52,42 @@ from ndk.sdk_common_pb2 import SdkMgrStatus as sdk_status
 
 from gnmi_info import gNMI_Info
 
+
+# Set up logging
+logger = logging.getLogger("Agent")
+# Stop pygnmi from logging to stdout as it overwrites our logging (srl
+# logs everything from stdout)
+for handler in logging.getLogger("pygnmi.client").handlers:
+    if isinstance(handler, logging.StreamHandler):
+        logging.getLogger("pygnmi.client").removeHandler(handler)
+
 SetData = Tuple[str, List[str]]
 
 DATATYPES = {"all", "config", "state", "operational"}
 ENCODINGS = {"json", "bytes", "proto", "ascii", "json_ietf"}
 
 
+def not_implemented(func):
+    """Decorator to mark a function as not implemented in the base class"""
+
+    def wrapper(*args, **kwargs):
+        args_str = "\n".join([str(arg) for arg in args])
+        kwargs_str = "\n".join([f"{key}={value}" for key, value in kwargs.items()])
+        log_str = (
+            f"{func.__name__} is not implemented\n"
+            f"Args:\n{args_str}\n"
+            f"Kwargs:\n {kwargs_str}"
+        )
+        logger.error(log_str)
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
 class BaseAgent(object):
     def __init__(self, name: str):
+        global logger
+        logger = logging.getLogger(f"Agent.{name}")
         self.name = name
         self.metadata = [("agent_name", self.name)]
         self.stream_id = None
@@ -126,9 +154,9 @@ class BaseAgent(object):
             request=register_request, metadata=self.metadata
         )
         if response.status == sdk_status.kSdkMgrSuccess:
-            logging.info("Agent registered successfully")
+            logger.info("Agent registered successfully")
         else:
-            logging.error(f"Agent registration failed with error {response.error_str}")
+            logger.error(f"Agent registration failed with error {response.error_str}")
 
         self._start_keepalive()
         request = NotificationRegisterRequest(op=NotificationRegisterRequest.Create)
@@ -138,7 +166,7 @@ class BaseAgent(object):
         if create_subscription_response.status == sdk_status.kSdkMgrSuccess:
             self.stream_id = create_subscription_response.stream_id
         else:
-            logging.warning(f"Failed to create subscription for agent {self.name}")
+            logger.warning(f"Failed to create subscription for agent {self.name}")
             raise Exception(f"Failed to create subscription for agent {self.name}")
 
         return self
@@ -157,57 +185,54 @@ class BaseAgent(object):
             exc_value: Exception value.
             exc_traceback: Exception traceback.
         """
-        logging.info("Exit GreeterAgent")
+        logger.info("Exit GreeterAgent")
 
         if exc_type:
-            logging.warning(f"Exception: {exc_type} {exc} :: \n\t{traceback}")
+            logger.warning(f"Exception: {exc_type} {exc} :: \n\t{traceback}")
 
         self._stop_keepalive()
         self._unregister_agent()
 
         self.channel.close()
 
-    def _handle_sigterm(self, *arg):
-        """Agent recieved SIGTERM signal.
-        Clean up and exit.
-        """
-        logging.info("Received SIGTERM, exiting")
-        # Unregister agent
-        self._unregister_agent()
-        sys.exit(0)
-
     def _unregister_agent(self):
         """Attempt to unregister the agent from the SDK Manager."""
-        logging.debug("Unregistering agent")
+        logger.debug("Unregistering agent")
         try:
             response = self.sdk_mgr_client.AgentUnRegister(
                 request=AgentRegistrationRequest(), metadata=self.metadata
             )
-        except (
-            grpc._channel._InactiveRpcError,
-            grpc._channel._MultiThreadedRendezvous,
-        ) as err:
-            logging.info("Agent unregistration failed (can't connect to app_mgr)")
-            logging.debug(f"Exception when unregistering: {err}")
+        except grpc.RpcError as err:
+            logger.info("Agent unregistration failed (can't connect to app_mgr)")
+            logger.debug(f"Exception when unregistering: {err}")
             return
         if response.status == sdk_status.kSdkMgrSuccess:
-            logging.info("Agent unregistered successfully")
+            logger.info("Agent unregistered successfully")
         else:
-            logging.warning(f"Agent unregistration failed - {response.error_str}")
+            logger.warning(f"Agent unregistration failed - {response.error_str}")
 
+    def _handle_sigterm(self, *arg):
+        """Agent recieved SIGTERM signal.
+        Clean up and exit.
+        """
+        logger.info("Received SIGTERM, exiting")
+        # Unregister agent
+        self._unregister_agent()
+        sys.exit(0)
+
+    @not_implemented
     def _handle_sighup(self, *arg):
         """Agent recieved SIGHUP signal.
         Reload configuration.
         """
-        logging.info("Handle SIGHUP")
-        logging.info("Reload config not implemented")
+        pass
 
+    @not_implemented
     def _handle_sigquit(self, *arg):
         """Agent recieved SIGQUIT signal.
         Terminate and generate a core dump.
         """
-        logging.info("Handle SIGQUIT")
-        logging.info("Stop and dump not implemented")
+        pass
 
     def _start_keepalive(self):
         """Start keepalive thread."""
@@ -228,11 +253,11 @@ class BaseAgent(object):
             request = KeepAliveRequest()
             res = self.sdk_mgr_client.KeepAlive(request, metadata=self.metadata)
             if res.status == sdk_status.kSdkMgrFailed:
-                logging.warning("KeepAlive failed")
+                logger.warning("KeepAlive failed")
             time.sleep(self.keepalive_interval)
 
     def run(self):
-        logging.warning("Run() function not implemented")
+        logger.warning("Run() function not implemented")
 
     def _update_telemetry(self, path_json: str, data_json: str) -> bool:
         """Update telemetry data.
@@ -257,7 +282,7 @@ class BaseAgent(object):
         telemetry_info.key.js_path = path_json
         telemetry_info.data.json_content = json.dumps(data_json)
 
-        logging.debug(f"Updating telemetry data: {telemetry_info}")
+        logger.debug(f"Updating telemetry data: {telemetry_info}")
 
         # Send the telemetry update request.
         response = self.sdk_telemetry_client.TelemetryAddOrUpdate(
@@ -266,9 +291,9 @@ class BaseAgent(object):
 
         # Check the response.
         if response.status == sdk_status.kSdkMgrSuccess:
-            logging.debug("Telemetry update successful")
+            logger.debug("Telemetry update successful")
         else:
-            logging.warning(f"Telemetry update failed error: {response.error_str}")
+            logger.warning(f"Telemetry update failed error: {response.error_str}")
 
         return response.status
 
@@ -298,9 +323,9 @@ class BaseAgent(object):
 
         # Check the response.
         if response.status == sdk_status.kSdkMgrSuccess:
-            logging.info("Telemetry delete successful")
+            logger.info("Telemetry delete successful")
         else:
-            logging.warning(f"Telemetry delete failed error: {response.error_str}")
+            logger.warning(f"Telemetry delete failed error: {response.error_str}")
 
         return response.status
 
@@ -365,9 +390,9 @@ class BaseAgent(object):
         )
         msg_str = f"stream_id: {response.stream_id} sub_id: {response.sub_id}"
         if response.status == sdk_status.kSdkMgrSuccess:
-            logging.info(f"Subscribed successfully :: {msg_str}")
+            logger.info(f"Subscribed successfully :: {msg_str}")
         else:
-            logging.error(f"Failed to subscribe :: {msg_str}")
+            logger.error(f"Failed to subscribe :: {msg_str}")
         return response.status
 
     def _handle_notification(self, notification: Notification):
@@ -376,7 +401,7 @@ class BaseAgent(object):
         """
         data = {field.name: value for field, value in notification.ListFields()}
         sub_id = data["sub_id"]
-        logging.debug(f"sub_id: {sub_id}")
+        logger.debug(f"sub_id: {sub_id}")
 
         if "config" in data:
             self._handle_ConfigNotification(data["config"])
@@ -408,68 +433,66 @@ class BaseAgent(object):
         ]
         unknown_fields = {field for field in data if field not in known_fields}
         if unknown_fields:
-            logging.warning(
+            logger.warning(
                 "Unknown fields in notification verify documentation for "
                 f"Notification information - unknown fields: {unknown_fields}"
             )
 
+    @not_implemented
     def _handle_ConfigNotification(self, notification: ConfigNotification):
         """
         Handles config notifications.
         """
-        logging.warning("ConfigNotification handling not implemented")
-        logging.info(f"Received ConfigNotification: {notification}")
+        pass
 
+    @not_implemented
     def _handle_InterfaceNotification(self, notification: InterfaceNotification):
-        """
-        Handles interface notifications.
-        """
-        logging.warning("InterfaceNotification handling not implemented")
-        logging.info(f"Received InterfaceNotification: {notification}")
+        """Handles interface notifications."""
+        pass
 
+    @not_implemented
     def _handle_NetworkInstanceNotification(
         self, notification: NetworkInstanceNotification
     ):
         """
         Handles network instance notifications.
         """
-        logging.warning("NetworkInstanceNotification handling not implemented")
-        logging.info(f"Received NetworkInstanceNotification: {notification}")
+        pass
 
+    @not_implemented
     def _handle_LldpNeighborNotification(self, notification: LldpNeighborNotification):
         """
         Handles lldp neighbor notifications.
         """
-        logging.warning("LldpNeighborNotification handling not implemented")
-        logging.info(f"Received LldpNeighborNotification: {notification}")
+        pass
 
+    @not_implemented
     def _handle_BfdSessionNotification(self, notification: BfdSessionNotification):
         """
         Handles bfd session notifications.
         """
-        logging.warning("BfdSessionNotification handling not implemented")
-        logging.info(f"Received BfdSessionNotification: {notification}")
+        pass
 
+    @not_implemented
     def _handle_IpRouteNotification(self, notification: IpRouteNotification):
         """
         Handles ip route notifications.
         """
-        logging.warning("IpRouteNotification handling not implemented")
-        logging.info(f"Received IpRouteNotification: {notification}")
+        pass
 
+    @not_implemented
     def _handle_AppIdentNotification(self, notification: AppIdentNotification):
         """
         Handles app ident notifications.
         """
-        logging.warning("AppIdentNotification handling not implemented")
-        logging.info(f"Received AppIdentNotification: {notification}")
+        pass
 
+    @not_implemented
     def _handle_NextHopGroupNotification(self, notification: NextHopGroupNotification):
         """
         Handles next hop group notifications.
         """
-        logging.warning("NextHopGroupNotification handling not implemented")
-        logging.info(f"Received NextHopGroupNotification: {notification}")
+        pass
 
     def _change_netns(
         self, netns_name: str, *, timeout: int = 10, interval: int = 1
@@ -487,7 +510,7 @@ class BaseAgent(object):
         """
         while True:
             if netns_name in netns.listnetns():
-                logging.info(f"Changing network namespace to {netns_name}")
+                logger.info(f"Changing network namespace to {netns_name}")
                 netns.setns(netns_name)
                 return True
             # TODO: Can we use a better way to check if the network namespace is
@@ -496,7 +519,7 @@ class BaseAgent(object):
                 time.sleep(interval)
                 timeout -= interval
                 if timeout <= 0:
-                    logging.error(f"Failed to change network namespace to {netns_name}")
+                    logger.error(f"Failed to change network namespace to {netns_name}")
                     return False
 
     def _gnmi_get(
@@ -562,7 +585,7 @@ class BaseAgent(object):
                 for path in paths:
                     responses[path] = client.get(path=[path], **query_info)
             except gNMIException as err:
-                logging.error(f"Error for path {path}: err - {err}")
+                logger.error(f"Error for path {path}: err - {err}")
                 raise err
         return responses[paths[0]] if single_request else responses
 
@@ -573,7 +596,24 @@ class BaseAgent(object):
         replace: Union[Tuple[str, dict], List[Tuple[str, dict]]] = None,
         gnmi_info: gNMI_Info = None,
         encoding: str = "json_ietf",
-    ) -> dict:
+    ) -> None:
+        """Set data to gNMI server.
+
+        Args only named arguments are allowed:
+            update: Path(s) and data to be updated (tuple or list of tuples).
+            replace: Path(s) and data to be replaced (tuple or list of tuples).
+            gnmi_info: gNMI server information if not uses the default
+                information for the agent.
+            encoding: Encoding format for the data to be retrieved.
+
+        Valid encoding values:
+            - json
+            - bytes
+            - proto
+            - ascii
+            - json_ietf
+
+        """
 
         self._check_valid_encoding(encoding)
         gnmi_info = gnmi_info if gnmi_info else self.default_gnmi_info
@@ -588,9 +628,7 @@ class BaseAgent(object):
             replace = [replace]
 
         with gNMIclient(**vars(gnmi_info)) as client:
-            response = client.set(update=update, replace=replace, encoding=encoding)
-            logging.info(f"Set response: {response}")
-        return response
+            client.set(update=update, replace=replace, encoding=encoding)
 
     def _check_valid_encoding(self, encoding) -> None:
         """Check that the encoding is valid. If not, raise an exception."""
