@@ -2,9 +2,9 @@ name: Robot tests
 
 on:
   workflow_dispatch:
-  push:
+  pull_request:
     branches:
-      - "tech-support-python"
+      - main
 
 jobs:
   lint:
