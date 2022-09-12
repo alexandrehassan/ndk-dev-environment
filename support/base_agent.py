@@ -3,7 +3,7 @@
 
 import threading
 from types import TracebackType
-from typing import Generator, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Type, Union
 import grpc
 import sys
 import logging
@@ -259,12 +259,12 @@ class BaseAgent(object):
     def run(self):
         logger.warning("Run() function not implemented")
 
-    def _update_telemetry(self, path_json: str, data_json: str) -> bool:
+    def _update_telemetry(self, path_json: str, data_json: Dict[str, Any]) -> bool:
         """Update telemetry data.
 
         Args:
             path_json: JSON string containing the path to the telemetry data.
-            data_json: JSON string containing the telemetry data to be updated.
+            data_json: Dictionary containing the telemetry data to be updated.
 
         Returns:
             True if the update was successful, False otherwise.
@@ -524,7 +524,7 @@ class BaseAgent(object):
 
     def _gnmi_get(
         self,
-        paths: Union[str, List[str]],
+        paths: Union[str, Sequence[str]],
         *,
         gnmi_info: gNMI_Info = None,
         encoding: str = "json_ietf",

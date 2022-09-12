@@ -146,7 +146,7 @@ class Support(BaseAgent):
         """
         res = {
             path: json.dumps(_get_val(data))
-            for path, data in self._gnmi_get(paths.keys()).items()
+            for path, data in self._gnmi_get(list(paths.keys())).items()
         }
 
         # Filter out the null values TODO
